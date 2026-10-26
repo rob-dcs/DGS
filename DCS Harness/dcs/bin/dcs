@@ -1,0 +1,674 @@
+#!/usr/bin/env node
+'use strict';
+const fs = require('node:fs');
+const os = require('node:os');
+const crypto = require('node:crypto');
+const path = require('node:path');
+const { parseArgs } = require('node:util');
+const { DcsError, readJson, writeJsonAtomic, withLock } = require('../lib/store');
+const repo = require('../lib/repo');
+const tasks = require('../lib/tasks');
+const board = require('../lib/board');
+const guard = require('../lib/guard');
+
+const now = () => (process.env.DCS_NOW ? new Date(process.env.DCS_NOW) : new Date());
+const iso = () => now().toISOString();
+const out = (x) => process.stdout.write(typeof x === 'string' ? `${x}\n` : `${JSON.stringify(x, null, 2)}\n`);
+
+function stdinJson() {
+  const text = fs.readFileSync(0, 'utf8');
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new DcsError(`stdin is not valid JSON: ${e.message}`);
+  }
+}
+
+// ---- helpers (later tasks add here) ----
+const reposFile = () => process.env.DCS_REPOS_FILE || path.join(os.homedir(), '.dcs', 'repos.json');
+
+// remember every repo dcs runs in, so `dcs purge` can find them; never fails the command
+function register(mainRoot) {
+  try {
+    const list = readJson(reposFile(), []);
+    if (!list.includes(mainRoot)) writeJsonAtomic(reposFile(), [...list, mainRoot]);
+  } catch {
+    // ponytail: an unwritable registry only means purge misses this repo
+  }
+}
+
+function ctxFor(cwd = process.cwd()) {
+  const P = repo.paths(cwd);
+  const settings = repo.loadSettings(P);
+  if (settings) register(P.mainRoot);
+  return { P, settings };
+}
+
+// moves src into the Trash folder; copy + remove when it's on another volume
+function toTrash(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  try {
+    fs.renameSync(src, dest);
+  } catch (e) {
+    if (e.code !== 'EXDEV') throw e;
+    fs.cpSync(src, dest, { recursive: true, verbatimSymlinks: true });
+    fs.rmSync(src, { recursive: true, force: true });
+  }
+}
+
+function dirStats(dir) {
+  let files = 0;
+  let bytes = 0;
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, e.name);
+      if (e.isDirectory()) walk(f);
+      else {
+        files += 1;
+        bytes += fs.lstatSync(f).size;
+      }
+    }
+  };
+  if (fs.existsSync(dir)) walk(dir);
+  return { files, bytes };
+}
+
+function requireSettings(settings) {
+  if (!settings) throw new DcsError('no dcs settings in this repo; run /dcs:setup');
+  return settings;
+}
+
+const specsDirOf = (settings) => (settings && settings.specs ? settings.specs.dir : null);
+
+function loadState(P, settings) {
+  const state = readJson(P.tasksFile, null);
+  if (!state) throw new DcsError('no .claude/dcs/tasks.json in this repo; run /dcs:setup');
+  const problems = tasks.validate(state, { specsDir: specsDirOf(settings) });
+  if (problems.length) throw new DcsError(`tasks.json invalid (fix it by hand; dcs never repairs it):\n- ${problems.join('\n- ')}`);
+  return state;
+}
+
+function mutate(P, settings, fn) {
+  return withLock(P.lockFile, () => {
+    const state = loadState(P, settings);
+    const before = new Map(state.tasks.map((t) => [t.id, t.status]));
+    const result = fn(state);
+    tasks.recordHistory(before, state, iso());
+    const problems = tasks.validate(state, { specsDir: specsDirOf(settings) });
+    if (problems.length) throw new DcsError(`refusing to write an invalid tasks.json:\n- ${problems.join('\n- ')}`);
+    writeJsonAtomic(P.tasksFile, state);
+    return result;
+  });
+}
+
+function taskArg(argv) {
+  const id = argv.find((a) => !a.startsWith('-'));
+  if (!id) throw new DcsError('missing task id');
+  return id;
+}
+
+const taskCwd = (P, t) => t.worktree || P.mainRoot;
+// after land, the task's changes sit on top of main's HEAD at landing time, not the wave's start
+const taskBase = (t) => t.landedOn || t.baseSha;
+
+function guardContext(input) {
+  const cwd = input.cwd || process.cwd();
+  const real = (p) => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return p;
+    }
+  };
+  const ctx = {
+    cwd, home: os.homedir(), tmpdir: real(os.tmpdir()), repoRoot: null, mainRoot: null, worktreesDir: null, dcsDir: null,
+    currentBranch: null, requireFixesTrailer: false, approvedKeys: [], contextError: null,
+    readFile: (f) => {
+      try {
+        return fs.readFileSync(path.resolve(cwd, f), 'utf8');
+      } catch {
+        return '';
+      }
+    },
+    askRules: () => JSON.parse(fs.readFileSync(path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json'), 'utf8')).permissions.ask,
+    gitAlias: (n) => {
+      try {
+        return repo.gitText(['config', '--get', `alias.${n}`], cwd, { allowCodes: [0, 1] }) || null;
+      } catch {
+        return null;
+      }
+    },
+  };
+  if (input.tool_name === 'Read') return ctx; // S1 needs no repo context
+  let P;
+  try {
+    P = repo.paths(cwd);
+  } catch {
+    return ctx; // not a git repo: C1 falls back to cwd as the root
+  }
+  Object.assign(ctx, { repoRoot: P.top, mainRoot: P.mainRoot, worktreesDir: P.worktreesDir, dcsDir: P.dcsDir });
+  try {
+    ctx.currentBranch = repo.currentBranch(cwd);
+  } catch {
+    // unborn HEAD: no branch yet
+  }
+  try {
+    const settings = readJson(P.settingsFile, null);
+    ctx.requireFixesTrailer = !!(settings && settings.requireFixesTrailer === true);
+    if (settings && Array.isArray(settings.prChecks) && settings.prChecks.length) {
+      ctx.prcheck = () => ({ record: readJson(P.prcheckFile, null), head: repo.gitText(['rev-parse', 'HEAD'], P.top), dirty: repo.isDirty(P.top) });
+    }
+    const state = readJson(P.tasksFile, null);
+    const problems = [
+      ...(settings ? repo.validateSettings(settings, P.mainRoot) : []),
+      ...(state ? tasks.validate(state, { specsDir: specsDirOf(settings) }) : []),
+    ];
+    if (problems.length) throw new DcsError(`invalid dcs files: ${problems.slice(0, 3).join('; ')}`);
+    const approved = ((state && state.tasks) || []).filter((t) => t.status === 'approved' && t.jira);
+    ctx.approvedKeys = [...new Set(approved.map((t) => t.jira))];
+  } catch (e) {
+    ctx.contextError = e.message;
+  }
+  return ctx;
+}
+
+function guardLog(input, result) {
+  try {
+    const d = now();
+    const dir = process.env.DCS_GUARD_LOG_DIR || path.join(os.homedir(), '.dcs', 'guard');
+    const file = path.join(dir, `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}.jsonl`);
+    const ti = input.tool_input || {};
+    const detail = guard.mask(String(ti.command || ti.file_path || ti.notebook_path || ti.path || '')).slice(0, 300);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify({
+      ts: iso(), session_id: input.session_id || null, agent_type: input.agent_type || null, permission_mode: input.permission_mode || null,
+      tool: input.tool_name || null, cwd: input.cwd || null, decision: result.decision, rules: result.rules, detail,
+    })}\n`);
+  } catch {
+    // logging never changes a decision
+  }
+}
+const nextIndex = (dir, prefix) => (fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.startsWith(prefix)).length : 0) + 1;
+
+const commands = {
+  // ---- commands (later tasks add here) ----
+  init() {
+    const P = repo.paths(process.cwd());
+    repo.init(P, stdinJson());
+    register(P.mainRoot);
+    out(`dcs initialised in ${P.mainRoot} (.claude/dcs/ is excluded from git)`);
+  },
+
+  check() {
+    const { P, settings } = ctxFor();
+    loadState(P, settings);
+    out(`ok: ${settings ? 'settings valid' : 'no settings yet (run /dcs:setup)'}, tasks valid`);
+  },
+
+  add(argv) {
+    const { values } = parseArgs({ args: argv, options: { 'dry-run': { type: 'boolean' } } });
+    const { P, settings } = ctxFor();
+    const input = stdinJson();
+    const ctx = { specsDir: specsDirOf(settings), refExists: (rel) => fs.existsSync(path.join(P.mainRoot, rel)), at: iso(), dryRun: !!values['dry-run'] };
+    const result = ctx.dryRun ? tasks.add(loadState(P, settings), input, ctx) : mutate(P, settings, (s) => tasks.add(s, input, ctx));
+    for (const w of result.warnings) process.stderr.write(`${w}\n`);
+    out(ctx.dryRun ? `ok: ${result.ids.length} task(s) would be added` : result.ids.join('\n'));
+  },
+
+  list(argv) {
+    const { values } = parseArgs({ args: argv, options: { json: { type: 'boolean' } } });
+    const { P, settings } = ctxFor();
+    const state = loadState(P, settings);
+    if (values.json) return out(state.tasks);
+    const rows = state.tasks.map((t) => [t.id, t.kind, t.status, `failures:${t.failures}`, t.jira || '-', t.title].join('\t'));
+    out(rows.join('\n') || '(no tasks)');
+  },
+
+  show(argv) {
+    const { P, settings } = ctxFor();
+    out(tasks.get(loadState(P, settings), taskArg(argv)));
+  },
+
+  next(argv) {
+    const { values } = parseArgs({ args: argv, options: { n: { type: 'string', default: '1' }, json: { type: 'boolean' } } });
+    const n = Number(values.n);
+    if (!Number.isInteger(n) || n < 1) throw new DcsError('--n must be a positive integer');
+    const { P, settings } = ctxFor();
+    const list = tasks.ready(loadState(P, settings), n);
+    if (values.json) return out(list);
+    out(list.map((t) => `${t.id}\t${t.kind}\t${t.title}`).join('\n') || '(no ready tasks)');
+  },
+
+  run(argv) {
+    const { values } = parseArgs({ args: argv, options: { 'skip-baseline': { type: 'boolean' } } });
+    const { P, settings } = ctxFor();
+    requireSettings(settings);
+    let baseline = null;
+    if (!values['skip-baseline']) {
+      if (repo.isDirty(P.mainRoot)) throw new DcsError('main checkout has uncommitted changes; commit or stash first');
+      const sha = repo.gitText(['rev-parse', 'HEAD'], P.mainRoot);
+      const dir = path.join(P.evidenceDir, '_baseline');
+      const log = path.join(dir, `verify-${nextIndex(dir, 'verify-')}.log`);
+      const results = repo.runVerify(P.mainRoot, settings.verify, log, { DCS_MAIN_ROOT: P.mainRoot, DCS_TASK_ID: '', DCS_WORKTREE: '' });
+      baseline = { sha, ok: results.every((r) => r.exit === 0), results, at: iso() };
+    }
+    const at = mutate(P, settings, (s) => {
+      if (baseline) tasks.setBaseline(s, baseline);
+      return tasks.setRunStart(s, iso());
+    });
+    if (baseline && !baseline.ok) {
+      const failing = baseline.results.filter((r) => r.exit !== 0).map((r) => `$ ${r.cmd}\n${r.tail}`).join('\n');
+      process.stderr.write(`dcs: baseline verify failed on main:\n${failing}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    out(`run started ${at}${baseline ? ' (baseline green)' : ''}`);
+  },
+
+  note(argv) {
+    const [id, file] = argv;
+    const { P, settings } = ctxFor();
+    tasks.get(loadState(P, settings), id);
+    try {
+      JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      throw new DcsError(`note must be a JSON file: ${file}`);
+    }
+    const dir = path.join(P.evidenceDir, id);
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = path.join(dir, `worker-${nextIndex(dir, 'worker-')}.json`);
+    fs.copyFileSync(file, dest);
+    out(path.relative(P.mainRoot, dest));
+  },
+
+  brief() {
+    try {
+      const { P, settings } = ctxFor();
+      const state = loadState(P, settings);
+      const notes = (id) => {
+        const dir = path.join(P.evidenceDir, id);
+        if (!fs.existsSync(dir)) return null;
+        const last = fs.readdirSync(dir).filter((f) => /^worker-\d+\.json$/.test(f)).sort((a, b) => Number(a.slice(7, -5)) - Number(b.slice(7, -5))).pop();
+        return last ? path.relative(P.mainRoot, path.join(dir, last)) : null;
+      };
+      process.stdout.write(tasks.brief(state, { repoName: path.basename(P.mainRoot), pluginRoot: path.resolve(__dirname, '..'), notes }));
+    } catch {
+      // the SessionStart hook must never fail loudly
+    }
+  },
+
+  stats(argv) {
+    const { values } = parseArgs({ args: argv, options: { json: { type: 'boolean' } } });
+    const { P, settings } = ctxFor();
+    const r = tasks.stats(loadState(P, settings));
+    if (values.json) return out(r);
+    const pct = (x) => `${Math.round(x * 100)}%`;
+    const lines = [
+      `tasks              ${r.tasks} (${Object.entries(r.byStatus).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'})`,
+      `first-pass rate    ${pct(r.firstPassRate)}`,
+      `mean review rounds ${r.meanReviewRounds}`,
+      `blocked rate       ${pct(r.blockedRate)}`,
+      `decisions          ${r.decisions}`,
+      ...Object.entries(r.passes).map(([p, v]) => `pass ${p.padEnd(12)} rounds ${v.rounds} · blocking ${v.blocking} · refuted ${v.refuted} · downgraded ${v.downgraded}`),
+    ];
+    out(lines.join('\n'));
+  },
+
+  decide(argv) {
+    const { values, positionals } = parseArgs({ args: argv, options: { q: { type: 'string' }, a: { type: 'string' }, why: { type: 'string' } }, allowPositionals: true });
+    const { P, settings } = ctxFor();
+    mutate(P, settings, (s) => tasks.decide(s, positionals[0], values.q, values.a, iso(), values.why));
+    out(`recorded decision on ${positionals[0]}`);
+  },
+
+  start(argv) {
+    const { values, positionals } = parseArgs({ args: argv, options: { worktree: { type: 'boolean' }, 'branch-ok': { type: 'boolean' } }, allowPositionals: true });
+    const id = positionals[0];
+    const { P, settings } = ctxFor();
+    requireSettings(settings);
+    const state = loadState(P, settings);
+    tasks.assertStartable(state, id);
+    const branch = repo.currentBranch(P.mainRoot);
+    const { jira } = tasks.get(state, id);
+    if (jira && !values['branch-ok'] && !new RegExp(`(^|[^a-z0-9])${jira}(?![0-9])`, 'i').test(branch)) {
+      const on = branch === 'HEAD' ? '(detached HEAD)' : branch;
+      throw new DcsError(`${id} is ${jira} but the current branch is ${on}; switch to the ticket's branch, or run dcs start ${id} --branch-ok (needs Navin's approval)`);
+    }
+    if (repo.isDirty(P.mainRoot)) throw new DcsError('main checkout has uncommitted changes; commit or stash first');
+    const baseSha = repo.gitText(['rev-parse', 'HEAD'], P.mainRoot);
+    const wt = values.worktree ? repo.createWorktree(P, id, settings.worktreeSetup) : null;
+    let t;
+    try {
+      t = mutate(P, settings, (s) => tasks.start(s, id, { branch, baseSha, worktree: wt && wt.dir, setupLockHash: wt && wt.setupLockHash }));
+    } catch (e) {
+      if (wt) repo.removeWorktree(P, id);
+      throw e;
+    }
+    if (t.jira) {
+      try {
+        const warning = board.touchInProgress(board.boardDir(), board.isoWeek(now()), t.jira, iso());
+        if (warning) process.stderr.write(`dcs: ${warning}\n`);
+      } catch (e) {
+        process.stderr.write(`dcs: board not updated: ${e.message}\n`);
+      }
+    }
+    out(wt ? `${id} started in worktree ${wt.dir}` : `${id} started on ${t.branch}`);
+  },
+
+  verify(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    requireSettings(settings);
+    const t0 = tasks.get(loadState(P, settings), id);
+    if (!tasks.canVerify(t0)) throw new DcsError(`${id} is ${t0.status}; verify needs doing or verified`);
+    const cwd = taskCwd(P, t0);
+    let record;
+    if (t0.kind !== 'work') {
+      record = { fingerprint: repo.fingerprint(cwd), skipped: true, integrity: [], at: iso() };
+    } else {
+      const release = settings.verifyConcurrency
+        ? repo.acquireVerifySlot(P, settings.verifyConcurrency, Number(process.env.DCS_VERIFY_SLOT_WAIT_MS) || 540000)
+        : () => {};
+      try {
+        const env = repo.dcsEnv(P, t0);
+        const dir = path.join(P.evidenceDir, id);
+        const log = path.join(dir, `verify-${nextIndex(dir, 'verify-')}.log`);
+        let results;
+        let setupLockHash;
+        if (t0.worktree) {
+          const current = repo.lockHash(cwd);
+          if (current !== t0.setupLockHash) {
+            try {
+              repo.runSetup(cwd, settings.worktreeSetup, env);
+              setupLockHash = current;
+            } catch (e) {
+              results = [{ cmd: 'worktreeSetup', exit: 1, tail: e.message }];
+            }
+          }
+        }
+        if (!results) results = repo.runVerify(cwd, settings.verify, log, env);
+        record = { fingerprint: repo.fingerprint(cwd), results, integrity: repo.integrity(cwd, taskBase(t0)), at: iso(), log };
+        if (setupLockHash !== undefined) record.setupLockHash = setupLockHash;
+      } finally {
+        release();
+      }
+    }
+    const t = mutate(P, settings, (s) => tasks.applyVerify(s, id, record));
+    out({ id, status: t.status, failures: t.failures, results: record.results || 'skipped', integrity: record.integrity });
+    if (t.status !== 'verified' && !(t.status === 'approved' && t.landed)) process.exitCode = 1;
+  },
+
+  diff(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    const t = tasks.get(loadState(P, settings), id);
+    if (t.status === 'todo') throw new DcsError(`${id} has not started`);
+    process.stdout.write(repo.diffSince(taskCwd(P, t), taskBase(t)));
+  },
+
+  apps(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    const t = tasks.get(loadState(P, settings), id);
+    if (t.status === 'todo') throw new DcsError(`${id} has not started`);
+    const files = repo.changedFiles(taskCwd(P, t), taskBase(t));
+    const under = (f, p) => {
+      const d = p.replace(/^\.\//, '').replace(/\/+$/, '');
+      return d === '' || d === '.' || f === d || f.startsWith(`${d}/`);
+    };
+    const touched = (app) => !app.paths || files.some((f) => app.paths.some((p) => under(f, p)));
+    out((settings.maestro || []).filter(touched).map(({ paths, ...app }) => app));
+  },
+
+  review(argv) {
+    const { values, positionals } = parseArgs({ args: argv, options: { pass: { type: 'string' }, findings: { type: 'string' } }, allowPositionals: true });
+    const id = positionals[0];
+    if (!values.pass || !values.findings) throw new DcsError('review needs --pass <name> and --findings <file>');
+    if (!fs.existsSync(values.findings)) throw new DcsError(`findings file not found: ${values.findings}`);
+    let raw;
+    try {
+      raw = JSON.parse(fs.readFileSync(values.findings, 'utf8'));
+    } catch (e) {
+      throw new DcsError(`findings file is not valid JSON: ${e.message}`);
+    }
+    const { P, settings } = ctxFor();
+    const t0 = tasks.get(loadState(P, settings), id);
+    const cwd = taskCwd(P, t0);
+    const quoteOk = (file, quote) => {
+      if (typeof quote !== 'string' || !quote.trim() || typeof file !== 'string') return false;
+      try {
+        return fs.readFileSync(path.resolve(cwd, file), 'utf8').includes(quote);
+      } catch {
+        return false;
+      }
+    };
+    const norm = tasks.normalizeFindings(t0, values.pass, raw, quoteOk);
+    const fingerprint = repo.fingerprint(cwd);
+    const saved = path.join(P.evidenceDir, id, `review-r${t0.reviewRound}-${values.pass}.json`);
+    const { task, complete, verdict } = mutate(P, settings, (s) => tasks.applyReview(s, id, {
+      pass: values.pass, blocking: norm.blocking, refuted: norm.refuted, downgraded: norm.downgraded, fingerprint, findings: saved, at: iso(),
+    }));
+    fs.mkdirSync(path.dirname(saved), { recursive: true });
+    fs.writeFileSync(saved, `${JSON.stringify({ pass: values.pass, findings: norm.findings, ...(norm.acResults ? { acResults: norm.acResults } : {}) }, null, 2)}\n`);
+    out({ id, pass: values.pass, verdict, status: task.status, roundComplete: complete, failures: task.failures });
+  },
+
+  land(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    const t = tasks.get(loadState(P, settings), id);
+    if (t.status !== 'approved') throw new DcsError(`${id} is ${t.status}; land needs approved`);
+    if (!t.worktree) throw new DcsError(`${id} has no worktree to land`);
+    const landedOn = repo.land(P, t);
+    mutate(P, settings, (s) => tasks.markLanded(s, id, landedOn));
+    out(`${id} landed into ${P.mainRoot}; run dcs verify ${id} before QA or done`);
+  },
+
+  purge(argv) {
+    const { values } = parseArgs({ args: argv, options: { yes: { type: 'boolean' } } });
+    let here = null;
+    try {
+      here = repo.paths(process.cwd()).mainRoot;
+    } catch {
+      // not in a repo: purge the registered ones
+    }
+    const roots = [...new Set([...readJson(reposFile(), []), ...(here ? [here] : [])])];
+    const items = [];
+    for (const root of roots) {
+      const ev = path.join(root, '.claude', 'dcs', 'evidence');
+      const st = dirStats(ev);
+      if (!st.files) continue;
+      let active = [];
+      try {
+        const state = readJson(path.join(root, '.claude', 'dcs', 'tasks.json'), { tasks: [] });
+        active = state.tasks.filter((t) => ['doing', 'verified', 'approved'].includes(t.status)).map((t) => t.id);
+      } catch {
+        // unreadable tasks file: no in-flight list
+      }
+      items.push({ label: root, src: ev, dest: path.join(`${path.basename(root)}-${crypto.createHash('sha1').update(root).digest('hex').slice(0, 6)}`, 'evidence'), ...st, active });
+    }
+    const guardDir = process.env.DCS_GUARD_LOG_DIR || path.join(os.homedir(), '.dcs', 'guard');
+    const g = dirStats(guardDir);
+    if (g.files) items.push({ label: 'guard logs', src: guardDir, dest: 'guard', ...g, active: [], contents: true });
+    if (!items.length) return out('nothing to purge');
+    const mb = (n) => `${(n / 1048576).toFixed(1)} MB`;
+    const lines = items.map((it) => `${it.label}: ${it.files} files, ${mb(it.bytes)}${it.active.length ? ` (includes in-flight ${it.active.join(', ')})` : ''}`);
+    const total = items.reduce((n, it) => n + it.bytes, 0);
+    if (!values.yes) {
+      return out([...lines, `total ${mb(total)}. Kept: tasks, settings, prcheck status, weekly board.`, 'Run dcs purge --yes to move these to the Trash.'].join('\n'));
+    }
+    const stamp = iso().replace(/[:.]/g, '-');
+    const trash = path.join(process.env.DCS_TRASH_DIR || path.join(os.homedir(), '.Trash'), `dcs-purge-${stamp}`);
+    for (const it of items) {
+      if (!it.contents) toTrash(it.src, path.join(trash, it.dest));
+      else for (const n of fs.readdirSync(it.src)) toTrash(path.join(it.src, n), path.join(trash, it.dest, n));
+    }
+    out([...lines, `moved to ${trash} (${mb(total)}); empty the Trash to free the space`].join('\n'));
+  },
+
+  prcheck() {
+    const { P, settings } = ctxFor();
+    requireSettings(settings);
+    const cmds = settings.prChecks;
+    if (!Array.isArray(cmds) || !cmds.length) throw new DcsError('no prChecks in settings; run /dcs:setup');
+    if (repo.isDirty(P.top)) throw new DcsError('uncommitted changes; commit first so the result matches a commit');
+    const sha = repo.gitText(['rev-parse', 'HEAD'], P.top);
+    const dir = path.join(P.evidenceDir, '_prcheck');
+    const results = [];
+    for (const [i, cmd] of cmds.entries()) {
+      const log = path.join(dir, `${sha.slice(0, 7)}-${i + 1}.log`);
+      const started = Date.now();
+      const [r] = repo.runVerify(P.top, [cmd], log);
+      results.push({ cmd, exit: r.exit, ms: Date.now() - started, log: path.relative(P.top, log) });
+      if (r.exit !== 0) {
+        writeJsonAtomic(P.prcheckFile, { sha, ok: false, at: iso(), results });
+        throw new DcsError(`prcheck failed at step ${i + 1}/${cmds.length}: ${cmd}\n${r.tail}`);
+      }
+    }
+    const record = { sha, ok: true, at: iso(), results };
+    writeJsonAtomic(P.prcheckFile, record);
+    out(record);
+  },
+
+  qa(argv) {
+    const { values, positionals } = parseArgs({
+      args: argv,
+      options: { pass: { type: 'boolean' }, fail: { type: 'boolean' }, invalid: { type: 'boolean' }, evidence: { type: 'string', multiple: true }, findings: { type: 'string' } },
+      allowPositionals: true,
+    });
+    const [id, ...rest] = positionals;
+    const picked = ['pass', 'fail', 'invalid'].filter((k) => values[k]);
+    if (picked.length !== 1) throw new DcsError('qa needs exactly one of --pass / --fail / --invalid');
+    const evidence = [...(values.evidence || []), ...rest];
+    if (!evidence.length) throw new DcsError('qa needs --evidence <paths...>');
+    for (const e of [...evidence, ...(values.findings ? [values.findings] : [])]) {
+      if (!fs.existsSync(e)) throw new DcsError(`file not found: ${e}`);
+    }
+    const { P, settings } = ctxFor();
+    const base = path.join(P.evidenceDir, id);
+    const dir = path.join(base, `qa-${nextIndex(base, 'qa-')}`);
+    const t = mutate(P, settings, (s) => tasks.applyQa(s, id, { result: picked[0], dir, at: iso() }));
+    fs.mkdirSync(dir, { recursive: true });
+    for (const e of evidence) fs.cpSync(e, path.join(dir, path.basename(e)), { recursive: true });
+    if (values.findings) fs.copyFileSync(values.findings, path.join(dir, 'findings.json'));
+    out({ id, status: t.status, qa: t.qa, failures: t.failures });
+  },
+
+  'approve-spec'(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    mutate(P, settings, (s) => tasks.approveSpec(s, id, iso()));
+    out(`${id} spec approved`);
+  },
+
+  done(argv) {
+    const { values, positionals } = parseArgs({ args: argv, options: { commit: { type: 'string' }, 'no-changes': { type: 'boolean' } }, allowPositionals: true });
+    const id = positionals[0];
+    const noChanges = !!values['no-changes'];
+    const { P, settings } = ctxFor();
+    requireSettings(settings);
+    const t0 = tasks.get(loadState(P, settings), id);
+    if (!noChanges && values.commit && !repo.commitExists(P.mainRoot, values.commit)) throw new DcsError(`commit not found: ${values.commit}`);
+    const diffEmpty = noChanges && t0.baseSha ? repo.diffSince(taskCwd(P, t0), taskBase(t0)).length === 0 : false;
+    const t = mutate(P, settings, (s) => tasks.applyDone(s, id, { commit: values.commit, noChanges, diffEmpty, visualQa: settings.visualQa }));
+    out(`${id} done${t.commit ? ` (${t.commit})` : ' (no changes)'}`);
+  },
+
+  unblock(argv) {
+    const id = taskArg(argv);
+    const { P, settings } = ctxFor();
+    mutate(P, settings, (s) => tasks.unblock(s, id));
+    out(`${id} unblocked (failures reset)`);
+  },
+
+  board(argv) {
+    const dir = board.boardDir();
+    const week = board.isoWeek(now());
+    const [sub, ...rest] = argv;
+    const parse = (options) => parseArgs({ args: rest, options, allowPositionals: true });
+    if (sub === 'add') {
+      const { values } = parse({ title: { type: 'string' }, key: { type: 'string' }, component: { type: 'string' }, repo: { type: 'string' }, source: { type: 'string' } });
+      const r = board.mutateWeek(dir, week, (data) => board.addRow(dir, data, values, iso()));
+      return out(`${r.id} added to ${week}`);
+    }
+    if (sub === 'set') {
+      const { values, positionals } = parse({ reason: { type: 'string' } });
+      board.mutateWeek(dir, week, (data) => board.setStatus(data, positionals[0], positionals[1], values.reason, iso()));
+      return out(`${positionals[0]} -> ${positionals[1]}`);
+    }
+    if (sub === 'pr') {
+      const { positionals } = parse({});
+      let repoName = null;
+      try {
+        repoName = path.basename(repo.paths(process.cwd()).mainRoot);
+      } catch {
+        // not inside a repo: attachPr falls back to the repo name in the URL
+      }
+      board.mutateWeek(dir, week, (data) => board.attachPr(data, positionals[0], positionals[1], repoName, iso()));
+      return out(`${positionals[0]} -> undergoing_pr`);
+    }
+    if (sub === 'edit') {
+      const { values, positionals } = parse({ title: { type: 'string' }, component: { type: 'string' }, source: { type: 'string' } });
+      board.mutateWeek(dir, week, (data) => board.editRow(data, positionals[0], values));
+      return out(`${positionals[0]} updated`);
+    }
+    const { values } = parseArgs({ args: argv, options: { week: { type: 'string' }, json: { type: 'boolean' }, offline: { type: 'boolean' }, report: { type: 'boolean' } } });
+    const target = values.week || week;
+    if (!/^\d{4}-W\d{2}$/.test(target)) throw new DcsError(`--week must look like 2026-W40, got ${target}`);
+    let warnings = [];
+    if (values.offline) board.mutateWeek(dir, week, () => null);
+    else warnings = board.mergedCheck(dir, week, board.ghView, iso());
+    for (const w of warnings) process.stderr.write(`dcs: ${w}\n`);
+    const data = board.loadWeek(dir, target) || { version: 1, week: target, rows: [] };
+    if (values.report) {
+      const { text, missing } = board.renderReport(data);
+      out(text);
+      if (missing.length) {
+        process.stderr.write(`dcs: missing component/title for: ${missing.join(', ')}\n`);
+        process.exitCode = 3;
+      }
+      return;
+    }
+    out(values.json ? data : board.renderMarkdown(data).trimEnd());
+  },
+
+  guard() {
+    try {
+      const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+      const result = guard.evaluate(input, guardContext(input));
+      if (result) {
+        guardLog(input, result);
+        out({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: result.decision, permissionDecisionReason: result.reason } });
+      }
+    } catch (e) {
+      process.stderr.write(`dcs guard failed closed: ${e.message}\n`);
+      process.exit(2);
+    }
+  },
+
+  decisions(argv) {
+    const { values } = parseArgs({ args: argv, options: { run: { type: 'boolean' } } });
+    const { P, settings } = ctxFor();
+    out(tasks.listDecisions(loadState(P, settings), { run: !!values.run }));
+  },
+};
+
+function main() {
+  const [cmd, ...argv] = process.argv.slice(2);
+  const fn = Object.hasOwn(commands, cmd) ? commands[cmd] : null;
+  if (!fn) {
+    process.stderr.write(`usage: dcs <${Object.keys(commands).join('|') || 'command'}> [args]\n`);
+    process.exit(1);
+  }
+  try {
+    fn(argv);
+  } catch (e) {
+    if (e instanceof DcsError || String(e.code || '').startsWith('ERR_PARSE_ARGS')) {
+      process.stderr.write(`dcs: ${e.message}\n`);
+      process.exit(1);
+    }
+    throw e;
+  }
+}
+
+main();
