@@ -1,0 +1,991 @@
+<!-- Layout: one section per component. Left = live specimen with numbered pins. Right = legend with the same numbers. -->
+<title>Agent Tree Anatomy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --font-ui: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --bg: #f4f5f7; --stage: #eceef2; --card: #ffffff; --ink: #16181d; --ink-2: #555b66; --ink-3: #808792;
+  --border: #dfe2e8; --rail: #98bde8; --line: #bcd3ee; --shadow: 0 1px 2px rgba(20,22,26,.06), 0 4px 14px rgba(20,22,26,.04);
+  --run: #1d6fd1; --run-bg: #e3effc; --done: #1a7f4b; --done-bg: #e1f4e9; --fail: #c23030; --fail-bg: #fbe5e5;
+  --ask: #8f5206; --ask-bg: #fbeed7; --wait: #5d6168; --wait-bg: #e9eaee;
+  --pin: #c8421a; --pin-ink: #ffffff; --focus: #1d6fd1;
+  --parchment: #f7f7f4; --surface: #f2f1ed; --hover-fill: #e6e5e0; --glow-a: #cdb2ff; --glow-b: #a561ff; --shine-line: #e8dcff; --shine-glow: #6b2bf5;
+  --k-ink: #26251e; --k-muted: #66655f;
+  --app-page: #f7f7f4; --orchid: #8833ff; --dot: rgba(38, 37, 30, .22); --drop: rgba(0, 0, 0, .30);
+  --captain-bg: #fbe9e1; --captain-ink: #b4492b; --worker-bg: #e6eefb; --worker-ink: #2a5db0; --reviewer-bg: #e6f4ec; --reviewer-ink: #25784a;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111215; --stage: #17191d; --card: #1e2024; --ink: #f0f1f4; --ink-2: #a5aab3; --ink-3: #747a85;
+    --border: #2a2d33; --rail: #3a6296; --line: #2b4a72; --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --run: #6aa8f0; --run-bg: #1c2d44; --done: #55c68a; --done-bg: #17301f; --fail: #f08080; --fail-bg: #3a1c1c;
+    --ask: #f0b95a; --ask-bg: #3a2b12; --wait: #a5aab3; --wait-bg: #2a2d33;
+    --pin: #ff8a5c; --pin-ink: #1a1208; --focus: #6aa8f0;
+  --parchment: #1a1915; --surface: #23221d; --hover-fill: #2e2d27; --k-ink: #f2f1ed; --k-muted: #aaa9a2; --app-page: #23221d; --dot: rgba(242, 241, 237, .18); --drop: rgba(0, 0, 0, .60);
+    --captain-bg: #2a2d33; --captain-ink: #e8795a; --worker-bg: #2a2d33; --worker-ink: #6f9be0; --reviewer-bg: #2a2d33; --reviewer-ink: #55c68a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111215; --stage: #17191d; --card: #1e2024; --ink: #f0f1f4; --ink-2: #a5aab3; --ink-3: #747a85;
+  --border: #2a2d33; --rail: #3a6296; --line: #2b4a72; --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --run: #6aa8f0; --run-bg: #1c2d44; --done: #55c68a; --done-bg: #17301f; --fail: #f08080; --fail-bg: #3a1c1c;
+  --ask: #f0b95a; --ask-bg: #3a2b12; --wait: #a5aab3; --wait-bg: #2a2d33;
+  --pin: #ff8a5c; --pin-ink: #1a1208; --focus: #6aa8f0;
+  --parchment: #1a1915; --surface: #23221d; --hover-fill: #2e2d27; --k-ink: #f2f1ed; --k-muted: #aaa9a2; --app-page: #23221d; --dot: rgba(242, 241, 237, .18); --drop: rgba(0, 0, 0, .60);
+  --captain-bg: #2a2d33; --captain-ink: #e8795a; --worker-bg: #2a2d33; --worker-ink: #6f9be0; --reviewer-bg: #2a2d33; --reviewer-ink: #55c68a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font-ui); -webkit-font-smoothing: antialiased; padding-block: 32px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+h1 { font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+h2 { font-size: 18px; font-weight: 600; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 12px; }
+.eyebrow { font: 500 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.head { display: flex; flex-direction: column; gap: 10px; max-width: 62ch; }
+.head p { color: var(--ink-2); }
+.bar { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; color: var(--ink-2); font-size: 13px; }
+.btn { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--rail); }
+
+.sec { display: flex; flex-direction: column; gap: 18px; }
+.sec__head { display: flex; flex-direction: column; gap: 6px; max-width: 64ch; }
+.sec__head p { color: var(--ink-2); }
+.pair { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 820px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.stage { background: var(--stage); border: 1px solid var(--border); border-radius: 14px; padding: 36px 28px; overflow-x: auto; }
+.stage--tight { padding: 28px 20px; }
+
+/* Legend */
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.legend li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 12px 8px; border-top: 1px solid var(--border); border-radius: 8px; cursor: default; }
+.legend li:last-child { border-bottom: 1px solid var(--border); }
+.legend li:hover, .legend li.is-on { background: var(--card); }
+.legend b { font-weight: 600; }
+.legend .what { color: var(--ink-2); margin-top: 2px; }
+.legend .spec { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 6px; }
+.chip { font: 400 11.5px/1 var(--font-mono); color: var(--ink-2); background: var(--stage); border: 1px solid var(--border); border-radius: 5px; padding: 3px 6px; }
+.num { width: 22px; height: 22px; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font: 600 11px/22px var(--font-mono); text-align: center; }
+
+/* Callouts: JS puts a numbered pin in the stage gutter and draws a leader line to the part. */
+.stage { position: relative; }
+.stage--ann { padding-inline: 56px; padding-bottom: 44px; overflow: visible; }
+.lead { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 2; overflow: visible; }
+.lead path { fill: none; stroke: var(--pin); stroke-width: 1.2; opacity: .75; }
+.lead circle { fill: var(--pin); }
+.pin { position: absolute; z-index: 3; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--pin); color: var(--pin-ink); font: 600 11px/22px var(--font-mono); text-align: center; pointer-events: none; }
+[data-pin].on { outline: 2px dashed var(--pin); outline-offset: 2px; border-radius: 6px; }
+.sp .card[data-pin].on { border-radius: 32px; }
+.sp .shell[data-pin].on { border-radius: 36px; }
+
+/* Component styles (same as agent-tree.html, scoped to .sp). The stage has the page color of the app. */
+.stage.sp { background-color: var(--app-page); }
+.stage.dotted, .minicanvas { background-image: radial-gradient(circle at center, var(--dot) 1.1px, transparent 1.7px); background-size: 24px 24px; background-position: -12px -12px; }
+.sp { --card-w: 380px; }
+/* Container: holds the card and the meta row. The color of the avatar box; the card is inset by 4px. */
+.sp .shell { position: relative; width: 100%; max-width: var(--card-w); background: var(--parchment); border-radius: 36px; corner-shape: squircle; padding: 4px; }
+.sp .card { --ink: var(--k-ink); --ink-2: var(--k-muted); --ink-3: var(--k-muted); --mx: 50%; --my: 50%;
+  background: var(--surface); border-radius: 32px; corner-shape: squircle; padding: 24px; width: 100%; position: relative; isolation: isolate; }
+.sp .card > * { position: relative; z-index: 1; }
+.sp .card::before, .sp .card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; z-index: 0; opacity: 0; transition: opacity .38s cubic-bezier(.4,0,.2,1); }
+.sp .card::before { background: color-mix(in srgb, var(--hover-fill) 20%, transparent);
+  box-shadow: inset 0 2px 12px 4px color-mix(in srgb, var(--glow-a) 26%, transparent), inset 0 0 32px 12px color-mix(in srgb, var(--glow-b) 20%, transparent); }
+.sp .card::after { box-shadow: inset 0 0 0 1.5px var(--shine-line), inset 0 0 36px 4px var(--shine-glow);
+  -webkit-mask-image: radial-gradient(circle 120px at var(--mx) var(--my), #000 0, transparent 100%); mask-image: radial-gradient(circle 120px at var(--mx) var(--my), #000 0, transparent 100%); }
+.sp .card:hover::before, .sp .card.is-hover::before { opacity: 1; transition-duration: .2s; background-image: var(--grain); }
+.sp .card:hover::after, .sp .card.is-hover::after { opacity: .85; transition-duration: .2s; }
+.sp .card { overflow: hidden; }
+/* Ripple of the DCS Harness UI Kit chip: a soft radial gradient ring of light. The same gradient, blur and grain as the kit. */
+.ripple { position: absolute; z-index: -1; border-radius: 50%; pointer-events: none; mix-blend-mode: lighten; transform: translate(-50%, -50%) scale(0.05);
+  background: radial-gradient(circle closest-side, rgba(107,43,245,0.22) 0%, rgba(107,43,245,0.08) 45%, rgba(107,43,245,0) 62%,
+    rgba(139,92,255,0.22) 70%, rgba(190,160,255,0.5) 78%, rgba(139,92,255,0.24) 86%, rgba(107,43,245,0) 93%,
+    rgba(139,92,255,0.12) 95%, rgba(107,43,245,0) 100%);
+  filter: blur(5px) url(#grain-ring); }
+.replay { margin-top: 12px; }
+.sp .card.is-selected::before { opacity: 1; background-image: var(--grain);
+  box-shadow: inset 0 2px 12px 4px color-mix(in srgb, var(--glow-a) 52%, transparent), inset 0 0 32px 12px color-mix(in srgb, var(--glow-b) 40%, transparent); }
+:root[data-theme="dark"] .sp .card { mix-blend-mode: lighten; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sp .card { mix-blend-mode: lighten; } }
+.sp { --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23g)' opacity='.2'/></svg>"); }
+
+/* Running: a line and an orchid inner glow travel round the edge. The layer has the radius and corner shape of the card,
+   and one conic mask shows an arc of 150deg that fades in at the tail and out at the tip. Grain is added to the line and the glow. */
+@property --run-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes run-spin { to { --run-a: 360deg; } }
+.sp .card > .runline { position: absolute; inset: 0; z-index: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none;
+  --run-fade: conic-gradient(from var(--run-a), transparent 0deg, rgba(0,0,0,.05) 30deg, rgba(0,0,0,.25) 60deg, rgba(0,0,0,.7) 87deg, #000 102deg, rgba(0,0,0,.75) 114deg, rgba(0,0,0,.35) 126deg, rgba(0,0,0,.08) 138deg, transparent 150deg, transparent 360deg);
+  -webkit-mask-image: var(--run-fade); mask-image: var(--run-fade); animation: run-spin 2.6s linear infinite; }
+.sp .card > .runline::before, .sp .card > .runline::after { content: ""; position: absolute; inset: 0; box-sizing: border-box; border-radius: inherit; corner-shape: inherit; }
+.sp .card > .runline::before { border: 1.5px solid var(--shine-line); filter: url(#grain-ring) drop-shadow(0 0 3px var(--shine-glow)); }
+.sp .card > .runline::after { box-shadow: inset 0 0 12px 2px rgba(136, 51, 255, .6), inset 0 0 28px 4px rgba(165, 97, 255, .28); filter: url(#grain-run); }
+@media (prefers-reduced-motion: reduce) { .sp .card > .runline { animation: none; display: none; } }
+
+.sp .top { display: flex; align-items: center; gap: 8px; }
+.sp .ava { flex: none; width: 40px; height: 40px; border-radius: 13px; corner-shape: squircle; background: var(--parchment); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+.sp .ava[data-role="captain"] { color: var(--captain-ink); }
+.sp .ava[data-role="worker"] { color: var(--worker-ink); }
+.sp .ava[data-role="reviewer"] { color: var(--reviewer-ink); }
+.sp .who { min-width: 0; flex: 1; display: flex; flex-direction: column; align-items: flex-start; }
+.sp .name { font-weight: 600; }
+.sp .model { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.sp .pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500; padding: 2px 7px; border-radius: 6px; flex: none; }
+.sp .pill[data-status="running"] { color: var(--run); background: var(--run-bg); }
+.sp .pill[data-status="done"] { color: var(--done); background: var(--done-bg); }
+.sp .pill[data-status="failed"] { color: var(--fail); background: var(--fail-bg); }
+.sp .pill[data-status="needs_input"] { color: var(--ask); background: var(--ask-bg); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sp .task { margin: 8px 0 4px; color: var(--ink-2); }
+.sp .tid { color: var(--ink-3); margin-right: 6px; display: inline-block; }
+.sp .taskt { display: inline-block; }
+/* Meta row: under the card, inside the container. The text lines up with the content of the card (4px + 24px). */
+.sp .meta { display: flex; align-items: center; justify-content: space-between; color: var(--k-muted); padding: 14px 28px; }
+.sp .cost { color: var(--k-ink); font-weight: 500; font-variant-numeric: tabular-nums; display: inline-block; }
+.sp .time { color: var(--k-muted); font-variant-numeric: tabular-nums; display: inline-block; }
+.sp .fold { display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--k-muted); border-radius: 6px; padding: 2px 6px; margin: -4px -6px -4px 0; font: inherit; cursor: pointer; }
+.sp .fold:hover { background: var(--wait-bg); color: var(--k-ink); }
+.sp .fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.sp .one { display: flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px dashed var(--rail); border-radius: 8px; color: var(--ink-2); font: inherit; font-size: 12px; background: transparent; width: 100%; max-width: var(--card-w); text-align: left; cursor: pointer; flex-wrap: wrap; }
+.sp .one:hover { background: var(--card); }
+.sp .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+.sp .dot[data-s="running"] { background: var(--run); } .sp .dot[data-s="done"] { background: var(--done); }
+.sp .dot[data-s="failed"] { background: var(--fail); } .sp .dot[data-s="needs_input"] { background: var(--ask); }
+.sp .tally { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Summary bar */
+.sp .sumbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; width: 100%; max-width: 520px; padding: 4px 0 18px; color: var(--ink-2); font-size: 13px; }
+.sp .sumbar .title { font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 8px; margin-right: auto; }
+.sp .sumbar .is-run { color: var(--run); } .sp .sumbar .is-ask { color: var(--ask); } .sp .sumbar .is-fail { color: var(--fail); }
+.sp .sumbar .total { color: var(--ink); font-weight: 600; }
+.sp .sumbar span { font-variant-numeric: tabular-nums; }
+
+/* Tree: the Captain, columns, and bezier wires in an SVG layer (paths under the cards, ring dots over them) */
+.sp .tree { --lane-w: 336px; --lane-gap: 24px; --bus: 72px; position: relative; z-index: 1; list-style: none; margin: 0 auto; padding: 0; width: max-content; max-width: 100%; }
+.sp .n--root { position: relative; display: flex; flex-direction: column; align-items: center; list-style: none; }
+.sp .n--root > .shell { width: var(--lane-w); max-width: none; }
+.sp .tree ul { list-style: none; }
+.sp .tree .lanes { margin: 0; padding: var(--bus) 0 0; display: flex; gap: var(--lane-gap); align-items: flex-start; justify-content: center; position: relative; }
+.sp .lanes > .lane { position: relative; width: var(--lane-w); }
+.sp .lanes > .lane > .shell { width: 100%; max-width: none; }
+.sp .stack { --gap: 24px; list-style: none; margin: 0 0 0 20px; padding: var(--gap) 0 0; }
+.sp .stack > li { position: relative; padding-left: 28px; margin-bottom: var(--gap); }
+.sp .stack > li:last-child { margin-bottom: 0; }
+.sp .stack > li > .shell { max-width: none; }
+.sp .wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; z-index: 0; pointer-events: none; overflow: visible; }
+.sp .wires--dots { z-index: 4; }
+.sp .wires path { fill: none; stroke: var(--orchid); stroke-width: 2; stroke-linecap: round; }
+.sp .wires circle { fill: var(--app-page); stroke: var(--orchid); stroke-width: 2; }
+.sp .wires [data-pin].on { stroke-width: 4; outline: 0; }
+/* A wire into a running task is lit: lighter orchid, plus a comet of light that travels from the parent to the child. The comet has the shine of a running card:
+   a light line with grain and a violet glow, and an orchid glow with grain. It is a stack of dashes of different lengths, so it fades in slowly at the tail and out faster at the tip. */
+.sp .wires path.is-run:not(.flow) { stroke: #a561ff; }
+.sp .wires .flow { fill: none; stroke-linecap: round; stroke-dashoffset: var(--o0); animation: wire-flow 2s linear infinite; }
+.sp .wires .flow.core { stroke: var(--shine-line); }
+.sp .wires .flow.glow { stroke: #8833ff; }
+.sp .wires .flows--core { filter: url(#wire-grain-ring) drop-shadow(0 0 3px var(--shine-glow)) blur(0.35px); }
+.sp .wires .flows--glow { filter: url(#wire-grain-glow); }
+@keyframes wire-flow { from { stroke-dashoffset: var(--o0); } to { stroke-dashoffset: var(--o1); } }
+@media (prefers-reduced-motion: reduce) { .sp .wires .flows { display: none; } }
+/* The failed count opens a list of the failed agents. */
+.sp .failchip { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; padding: 3px 10px; background: var(--fail-bg); }
+.sp .failbar { display: flex; justify-content: flex-end; width: 100%; max-width: 520px; padding-bottom: 8px; }
+.sp .failpop { width: min(360px, 100%); margin-left: auto; display: grid; gap: 14px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; corner-shape: squircle; box-shadow: 0 12px 32px var(--drop); color: var(--k-ink); }
+.sp .failrow { display: grid; grid-template-columns: 32px 1fr; gap: 4px 12px; }
+.sp .failrow__icon { grid-row: span 2; width: 32px; height: 32px; border-radius: 50%; background: var(--fail-bg); color: var(--fail); display: grid; place-items: center; }
+.sp .failrow__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.sp .failrow__name { font-weight: 600; font-size: 14px; }
+.sp .failrow__task { color: var(--k-muted); }
+.sp .failrow__why { grid-column: 2; color: var(--k-muted); }
+.sp .failrow__acts { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.sp .failrow__acts .btn { border-radius: 999px; padding: 5px 14px; background: var(--surface); }
+.sp .failrow__acts .btn--primary { background: var(--k-ink); color: var(--app-page); border-color: var(--k-ink); }
+.sp .mode { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 12px; }
+.sp .mode::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--wait); flex: none; }
+.sp .mode[data-mode="live"]::before { background: var(--run); }
+.sp .mode[data-mode="replay"]::before { background: var(--ask); }
+.sp .mode[data-mode="off"]::before { background: var(--fail); }
+.pair--wide { grid-template-columns: minmax(0, 1fr); }
+.legend--cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
+.legend--cols li:last-child { border-bottom: 0; }
+.legend--cols li:nth-last-child(2):nth-child(odd) { border-bottom: 0; }
+@media (max-width: 820px) { .legend--cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* Mini canvas: try the drag. Same motion as agent-tree.html (Draggable Sticker: Tilt 6, Strength 4, Elevation 2). */
+.minicanvas { position: relative; height: 560px; border-radius: 24px; corner-shape: squircle; background-color: var(--app-page); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.minicanvas .gi { position: absolute; }
+.minicanvas .gi.is-dragging { z-index: 20; }
+.minicanvas .shell { width: 264px; cursor: grab; }
+.minicanvas .gi.is-dragging .shell { cursor: grabbing; }
+
+.col { display: flex; flex-direction: column; gap: 12px; }
+.states { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.swatch { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.swatch i { width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--border); display: block; flex: none; }
+
+.tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tbl th { text-align: left; font: 500 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 0 12px 10px 0; }
+.tbl td { padding: 9px 12px 9px 0; border-top: 1px solid var(--border); vertical-align: top; }
+.tbl td:first-child { font-weight: 500; white-space: nowrap; }
+.scroll { overflow-x: auto; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.note { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.note h3 { font-size: 14px; }
+.note p { color: var(--ink-2); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <!-- Grain of the DCS Agentic Harness page: the line uses grain-ring, the running glow uses grain-run (white speckles cut to the glow's own shape). -->
+  <filter id="grain-ring" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0 0 0 0 1" result="g0"/><feGaussianBlur in="g0" stdDeviation="0.45" result="g"/><feComposite in="SourceGraphic" in2="g" operator="arithmetic" k1="0.80" k2="0.28" k3="0" k4="0"/></filter>
+  <filter id="grain-run" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1.0" result="w"/><feGaussianBlur in="w" stdDeviation="0.55" result="wb"/><feComposite in="wb" in2="SourceAlpha" operator="in" result="spark"/><feComposite in="SourceGraphic" in2="spark" operator="arithmetic" k1="0" k2="1" k3="0.6" k4="0"/></filter>
+  <filter id="wire-grain-ring" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="14000" height="14000" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0 0 0 0 1" result="g0"/><feGaussianBlur in="g0" stdDeviation="0.45" result="g"/><feComposite in="SourceGraphic" in2="g" operator="arithmetic" k1="0.80" k2="0.28" k3="0" k4="0"/></filter>
+  <filter id="wire-grain-glow" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="14000" height="14000" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="4" result="soft"/><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1.0" result="w"/><feGaussianBlur in="w" stdDeviation="0.55" result="wb"/><feComposite in="wb" in2="soft" operator="in" result="spark"/><feComposite in="soft" in2="spark" operator="arithmetic" k1="0" k2="1" k3="0.6" k4="0"/></filter>
+</defs></svg>
+
+<div class="wrap">
+  <header class="head">
+    <span class="eyebrow">dcs-harness · component</span>
+    <h1>Agent Tree anatomy</h1>
+    <p>Every part of the Agent Tree, with its role, size and token. Hover a row in a legend to outline the part in the specimen. The Captain starts every agent. The tree groups the agents by task, one column for each task, on a canvas with a dotted grid. The page can also show a real run (Part 10). The failed count opens a list (Part 11).</p>
+    <div class="bar"><button class="btn" id="theme" type="button">Switch theme</button></div>
+  </header>
+
+  <section class="sec" id="card">
+    <div class="sec__head">
+      <span class="eyebrow">Part 1</span>
+      <h2>Agent card</h2>
+      <p>One card per agent. A container holds the card and, under it, the meta row. The card is the same for the Captain, a worker and a reviewer. Only the avatar letter color, the name and the model change.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp" id="spCard"></div>
+      <ol class="legend" id="lgCard"></ol>
+    </div>
+  </section>
+
+  <section class="sec" id="surface">
+    <div class="sec__head">
+      <span class="eyebrow">Part 2</span>
+      <h2>Card surface states</h2>
+      <p>The card uses the Chip surface from the DCS Harness UI Kit. It has four states and a click effect. Hover a card in the specimen to see the real hover.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp" id="spSurface"></div>
+      <ol class="legend" id="lgSurface"></ol>
+    </div>
+  </section>
+
+  <section class="sec" id="tree">
+    <div class="sec__head">
+      <span class="eyebrow">Part 3</span>
+      <h2>Tree and summary bar</h2>
+      <p>The summary bar counts all agents. The Captain starts every agent. The tree groups them by task, with one column for each task. Bezier wires join the cards. The Captain's cost includes every column.</p>
+    </div>
+    <div class="pair pair--wide">
+      <div class="stage stage--ann sp dotted" id="spTree"></div>
+      <ol class="legend legend--cols" id="lgTree"></ol>
+    </div>
+  </section>
+
+  <section class="sec" id="canvas">
+    <div class="sec__head">
+      <span class="eyebrow">Part 4</span>
+      <h2>Canvas, grid and drag</h2>
+      <p>The tree sits on an infinite canvas with a dotted grid. A card moves with the cards that hang on it, and lands on the grid. Try it: drag a card in the specimen.</p>
+    </div>
+    <div class="pair pair--wide">
+      <div class="stage stage--ann sp" id="spCanvas"></div>
+      <ol class="legend legend--cols" id="lgCanvas"></ol>
+    </div>
+    <div class="stage stage--tight"><div class="scroll"><table class="tbl" aria-label="Drag settings">
+      <thead><tr><th>Setting</th><th>Value</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>Tilt</td><td class="mono">6</td><td>The largest lean, in degrees. The card leans with the speed of the pointer (sensitivity 3, smoothing 0.05). On release the lean settles by 0.9 each frame.</td></tr>
+        <tr><td>Strength</td><td class="mono">4</td><td>The strength of the ripple. 4 gives the kit\'s ripple (peak 0.7). It replaces the lighting of the Draggable Sticker.</td></tr>
+        <tr><td>Elevation</td><td class="mono">2</td><td>The lift, out of 10. A held card grows by the level ÷ 10 × 0.3, so 6%. The shadow goes from 0 1px 2px to 0 13px 14px.</td></tr>
+        <tr><td>Lift speed</td><td class="mono">1.92 a second</td><td>The card reaches full lift in about half a second. On release it goes back at the same speed.</td></tr>
+        <tr><td>Ripple, wave, wobble</td><td class="mono">pick up and release</td><td>The kit\'s chip effect plays at the pointer when a card is picked up, and again when it is let go: the ripple, the dip and rise, and the bent edge.</td></tr>
+        <tr><td>Snap</td><td class="mono">24px grid</td><td>The head card of the moved group lands on the grid, with a small overshoot (280ms).</td></tr>
+        <tr><td>Pan</td><td class="mono">drag the canvas, or scroll</td><td>Dragging empty space, or trackpad scroll, moves the canvas.</td></tr>
+        <tr><td>Zoom</td><td class="mono">Ctrl or ⌘ + scroll, 30% to 200%</td><td>Zoom is about the pointer. The grid scales with it. Reset view returns to 100%.</td></tr>
+        <tr><td>Reset layout</td><td class="mono">button</td><td>Puts every moved group back in its place.</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+  <section class="sec" id="status">
+    <div class="sec__head">
+      <span class="eyebrow">Part 5</span>
+      <h2>Status</h2>
+      <p>Four statuses. Each one has a color, an icon and a label, so color is never the only signal.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp" id="spStatus"></div>
+      <ol class="legend" id="lgStatus"></ol>
+    </div>
+  </section>
+
+  <section class="sec" id="fold">
+    <div class="sec__head">
+      <span class="eyebrow">Part 6</span>
+      <h2>Folded branch</h2>
+      <p>A folded branch becomes one line. The line keeps the count, the status tally and the cost of the hidden agents.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp col" id="spFold"></div>
+      <ol class="legend" id="lgFold"></ol>
+    </div>
+  </section>
+
+  <section class="sec" id="roles">
+    <div class="sec__head">
+      <span class="eyebrow">Part 7</span>
+      <h2>Roles</h2>
+      <p>Three roles. The avatar shows the first letter of the name in the role color, in a box with the color of the page.</p>
+    </div>
+    <div class="stage sp stage--tight"><div class="scroll"><table class="tbl" aria-label="Roles">
+      <thead><tr><th>Role</th><th>Avatar</th><th>Model</th><th>Started by</th><th>Demo rate</th></tr></thead>
+      <tbody id="roleRows"></tbody>
+    </table></div></div>
+  </section>
+
+  <section class="sec" id="measure">
+    <div class="sec__head">
+      <span class="eyebrow">Part 8</span>
+      <h2>Measurements and tokens</h2>
+    </div>
+    <div class="pair">
+      <div class="stage stage--tight"><div class="scroll"><table class="tbl" aria-label="Measurements">
+        <thead><tr><th>Part</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Container</td><td class="mono">fill parchment, radius 36px, padding 4px, squircle</td></tr>
+          <tr><td>Card</td><td class="mono">fill bone, radius 32px, padding 24px, squircle</td></tr>
+          <tr><td>Meta row</td><td class="mono">padding 14px 28px, under the card</td></tr>
+          <tr><td>Avatar</td><td class="mono">40 × 40px, radius 13px, squircle (0.32 of the size)</td></tr>
+          <tr><td>Status pill</td><td class="mono">11.5px, padding 2 / 7px, radius 6px</td></tr>
+          <tr><td>Task text</td><td class="mono">2 lines, then cut off</td></tr>
+          <tr><td>Column width</td><td class="mono">336px, gap 24px</td></tr>
+          <tr><td>Captain to first row</td><td class="mono">72px</td></tr>
+          <tr><td>Gap between cards in a column</td><td class="mono">24px</td></tr>
+          <tr><td>Column indent</td><td class="mono">20px to the ring dot, 48px to the cards</td></tr>
+          <tr><td>Wires</td><td class="mono">bezier, 2px, orchid #8833ff</td></tr>
+          <tr><td>Lit wire</td><td class="mono">#a561ff, comet #e8dcff, 42% of the wire, 120px/s</td></tr>
+          <tr><td>Ring dot</td><td class="mono">10px, 2px ring, page fill</td></tr>
+          <tr><td>Grid</td><td class="mono">24px dots and snap step</td></tr>
+          <tr><td>Running shine</td><td class="mono">arc 150°, one lap in 2.6s, line 1.5px</td></tr>
+          <tr><td>Folded line</td><td class="mono">12px text, dashed 1px border, radius 8px</td></tr>
+        </tbody>
+      </table></div></div>
+      <div class="stage stage--tight col" id="tokens"></div>
+    </div>
+  </section>
+
+  <section class="sec" id="rules">
+    <div class="sec__head">
+      <span class="eyebrow">Part 9</span>
+      <h2>Behavior</h2>
+    </div>
+    <div class="notes">
+      <div class="note"><h3>Cost rollup</h3><p>A card with children shows its own cost plus the cost of every descendant. A card without children shows only its own cost.</p></div>
+      <div class="note"><h3>Time</h3><p>A leaf shows its run time. A branch shows the time from its start to the latest end in the branch.</p></div>
+      <div class="note"><h3>Live update</h3><p>Each tick changes text only. The elements stay in place, so hover, focus and a drag do not break when an agent starts or finishes.</p></div>
+      <div class="note"><h3>Folding</h3><p>The fold button and the folded line both toggle the branch. Focus returns to the fold button after a toggle.</p></div>
+      <div class="note"><h3>Grouping by task</h3><p>The Captain starts every agent. The tree puts the agents of one task in one column. The first agent of the task heads the column.</p></div>
+      <div class="note"><h3>Running tasks</h3><p>The wire into a task is lit while that task has a running agent. A finished head card stays lit while a reviewer under it runs. When no agent runs, no wire is lit.</p></div>
+      <div class="note"><h3>Wires</h3><p>A script measures the cards and draws one bezier curve for each card. The curves follow a card while it moves, tilts or grows. A ring dot that a moved card covers is hidden.</p></div>
+      <div class="note"><h3>Running shine</h3><p>A running agent has a line and an orchid inner glow that travel round its edge. They fade at both ends and have grain. Each card starts at its own point. A card that stops running loses the shine.</p></div>
+      <div class="note"><h3>Cards appear when the Captain starts an agent</h3><p>A task that waits in dcs has no card. A card exists only for an agent that the Captain has started.</p></div>
+      <div class="note"><h3>New card</h3><p>A new child card comes out from behind its parent. It starts hidden behind the parent card, at scale 0 and opacity 0, with its centre on the parent's centre. In 650 ms it moves into its place while it grows and fades in. Its opacity is full at 70% of the motion. While it moves, it is under every other card. The wire to the card fades in with it. The Captain has no parent, so it only grows from 94%.</p></div>
+      <div class="note"><h3>Wire stability</h3><p>The page measures a new card at the end of its entrance, so a wire ends where the card will stop. It changes wires in place and does not rebuild them, so no wire jumps or flickers when a card appears.</p></div>
+      <div class="note"><h3>Selected state</h3><p>The Root card becomes selected when the user expands the Captain branch. It stays selected until the user folds the branch.</p></div>
+      <div class="note"><h3>Moving cards</h3><p>A head card moves its column. The Captain moves everything. Any other card moves alone. The move is in world units, so it is right at any zoom.</p></div>
+      <div class="note"><h3>Accessibility</h3><p>The tree uses <code>role="tree"</code>. Each card is a <code>treeitem</code> with the name and status in its label. A branch has <code>aria-expanded</code>. Moving a card needs a pointer for now.</p></div>
+      <div class="note"><h3>Motion</h3><p>The spinner, the card entrance, the wire comet, the running shine, the click effect and the lift stop when the viewer asks for reduced motion.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="live">
+    <div class="sec__head">
+      <span class="eyebrow">Part 10</span>
+      <h2>Live data</h2>
+      <p>The page can show a real run. A local server reads the Claude Code session in a repo and sends the page the whole list of agents every 2 seconds. Opened from a file, the page runs the demo instead.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp col" id="spLive"></div>
+      <ol class="legend" id="lgLive"></ol>
+    </div>
+    <div class="stage stage--tight"><div class="scroll"><table class="tbl" aria-label="Page modes">
+      <thead><tr><th>Label</th><th>How to get it</th><th>What the page does</th></tr></thead>
+      <tbody>
+        <tr><td>Live</td><td class="mono">http://127.0.0.1:4173/</td><td>Applies each snapshot. The clock follows the real time since the Captain started. The Replay and speed buttons are hidden.</td></tr>
+        <tr><td>Waiting for a Claude Code session</td><td class="mono">server runs, no session yet</td><td>Shows an empty tree. It fills when a Claude Code session starts in the repo.</td></tr>
+        <tr><td>Disconnected</td><td class="mono">server stopped</td><td>Keeps the last tree. The browser reconnects on its own and the server sends the latest list at once.</td></tr>
+        <tr><td>Replay</td><td class="mono">?replay=&lt;run id&gt;</td><td>Plays a recorded run at its real pace. The speed button changes the pace. Add <span class="mono">&amp;instant=1</span> to open the finished run.</td></tr>
+        <tr><td>Demo</td><td class="mono">?demo=1, or open the file</td><td>Runs the built-in script with simulated time and cost.</td></tr>
+      </tbody>
+    </table></div></div>
+    <div class="stage stage--tight"><div class="scroll"><table class="tbl" aria-label="Snapshot fields">
+      <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td>run, live, seq, ts</td><td>The run id, whether the Captain still works, a counter that grows when the agents change, and the time of the poll.</td></tr>
+        <tr><td>id, parentId</td><td>The agent and who started it. Only the Captain has no parent.</td></tr>
+        <tr><td>taskId</td><td>The dcs task, such as <span class="mono">t2</span>. The Captain puts it first in the agent description. It decides the column. An agent with no task id hangs on the Captain.</td></tr>
+        <tr><td>role, name, model, task</td><td>Role from the agent type (<span class="mono">dcs:worker</span> or <span class="mono">dcs:reviewer</span>), the model from the transcript, and the task text after the id.</td></tr>
+        <tr><td>status</td><td>Running, Done, Failed or Needs input. A finished agent has the status of its own last reply: <span class="mono">failed</span> and <span class="mono">blocked</span> show as Failed, <span class="mono">needs_input</span> as Needs input. A reply that is not dcs JSON counts as Done.</td></tr>
+        <tr><td>note</td><td>The reason for a Failed or Needs input status, taken from the reply. It shows as the tooltip of the task text.</td></tr>
+        <tr><td>start, end</td><td>Times from the first and last row of the agent transcript. An agent that is still running has no end.</td></tr>
+        <tr><td>cost, costFinal</td><td>Dollars from the tokens in the transcript. Final only after the agent stops. A model with no price gives no cost.</td></tr>
+      </tbody>
+    </table></div></div>
+    <div class="notes">
+      <div class="note"><h3>Where the data comes from</h3><p>The Agent Monitor library lists the agents. The dcs task store gives the task states. The transcripts give the times and the tokens. The page changes none of them.</p></div>
+      <div class="note"><h3>Task ids</h3><p>This page and the demo show ids such as t-02. A live run shows the dcs ids, such as t2. The adapter reads both forms as t2.</p></div>
+      <div class="note"><h3>Failed and Needs input</h3><p>Both come from what the agent says when it stops. The dcs failure count is not used: in real runs a worker stopped with the count still at 0.</p></div>
+      <div class="note"><h3>Privacy</h3><p>The server listens on this computer only and refuses any other host name. Recorded runs hold real task names and costs. Keep that folder out of a shared or synced location.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" id="failed">
+    <div class="sec__head">
+      <span class="eyebrow">Part 11</span>
+      <h2>Failed list</h2>
+      <p>The failed count in the summary bar is a button. It opens a list with one row for each failed agent. The tree is read-only, so a row can show the card and dismiss the entry. It cannot retry the task.</p>
+    </div>
+    <div class="pair">
+      <div class="stage stage--ann sp col" id="spFail"></div>
+      <ol class="legend" id="lgFail"></ol>
+    </div>
+    <div class="stage stage--tight"><div class="scroll"><table class="tbl" aria-label="Failed list behavior">
+      <thead><tr><th>Action</th><th>What the page does</th></tr></thead>
+      <tbody>
+        <tr><td>Click the count</td><td>Opens or closes the list. The chevron turns, and <span class="mono">aria-expanded</span> follows.</td></tr>
+        <tr><td>Show card</td><td>Pans the canvas so that the card of that agent is in the centre.</td></tr>
+        <tr><td>Dismiss</td><td>Removes the row and lowers the count. The card keeps its Failed status. The list closes when no row is left.</td></tr>
+        <tr><td>Escape, or a click outside</td><td>Closes the list. Escape returns focus to the count.</td></tr>
+        <tr><td>A long reason</td><td>Shows four lines. The tooltip holds the full text.</td></tr>
+      </tbody>
+    </table></div></div>
+  </section>
+
+</div>
+
+<script>
+var FAILCHEV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 15 6-6 6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var ICON = {
+  running: '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-opacity=".25" stroke-width="2.5"/><path d="M12 3.5A8.5 8.5 0 0 1 20.5 12" stroke="currentColor" stroke-linecap="round" stroke-width="2.5"/></svg>',
+  done: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 13 4 4 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  failed: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8v5m0 3.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M10 4.5 3 18a2 2 0 0 0 1.8 3h14.4a2 2 0 0 0 1.8-3L14 4.5a2 2 0 0 0-4 0Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  needs_input: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7m0 3v.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+};
+var LABEL = { running: "Running", done: "Done", failed: "Failed", needs_input: "Needs input" };
+var CHEV = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9 12 15 6 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+var SPARK = '<svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" style="color:var(--run)"><path d="M7 1.2c.4 2.9 1.9 4.4 4.8 4.8-2.9.4-4.4 1.9-4.8 4.8C6.6 7.9 5.1 6.4 2.2 6 5.1 5.6 6.6 4.1 7 1.2Z" fill="currentColor"/></svg>';
+
+/* at(n) gives the attribute that marks a part for a numbered pin. Parts without a number get nothing. */
+function at(n) { return n ? ' data-pin="' + n + '"' : ''; }
+
+var runCount = 0;
+/* One agent: a container (shell) that holds the card and, under it, the meta row. */
+function card(o) {
+  var p = o.pins || {}, st = o.status;
+  var fold = o.fold ? '<button type="button" class="fold" aria-expanded="' + (o.open !== false) + '" aria-label="Fold ' + o.fold + ' sub-agents"' + at(p.fold) + '><span>' + o.fold + '</span>' + CHEV + '</button>' : '';
+  var run = st === 'running' ? '<span class="runline" aria-hidden="true" style="animation-delay:-' + ((runCount++ * 0.9) % 2.6).toFixed(1) + 's"></span>' : '';
+  return '<div class="shell" data-status="' + st + '"' + at(p.shell) + '>' +
+    '<div class="card" data-status="' + st + '"' + at(p.card) + '>' +
+      '<div class="top">' +
+        '<span class="ava" data-role="' + o.role + '"' + at(p.ava) + '>' + o.name[0] + '</span>' +
+        '<span class="who"><span class="name"' + at(p.name) + '>' + o.name + '</span><span class="model"' + at(p.model) + '>' + o.model + '</span></span>' +
+        '<span class="pill" data-status="' + st + '"' + at(p.pill) + '>' + ICON[st] + LABEL[st] + '</span>' +
+      '</div>' +
+      '<p class="task">' + (o.tid ? '<span class="tid"' + at(p.tid) + '>' + o.tid + '</span>' : '') + '<span class="taskt"' + at(p.task) + '>' + o.task + '</span></p>' +
+      run +
+    '</div>' +
+    '<div class="meta"' + at(p.meta) + '><span><span class="cost"' + at(p.cost) + '>' + o.cost + '</span><span class="time"' + at(p.time) + '> · ' + o.time + '</span></span>' + fold + '</div>' +
+  '</div>';
+}
+
+function legend(el, items) {
+  el.innerHTML = items.map(function (it, i) {
+    return '<li data-n="' + (i + 1) + '" tabindex="0"><span class="num">' + (i + 1) + '</span><div><b>' + it[0] + '</b><p class="what">' + it[1] + '</p>' +
+      (it[2] ? '<div class="spec">' + it[2].map(function (c) { return '<span class="chip">' + c + '</span>'; }).join('') + '</div>' : '') + '</div></li>';
+  }).join('');
+  var stage = el.previousElementSibling;
+  function set(li, on) {
+    var t = stage.querySelectorAll('[data-pin="' + li.dataset.n + '"]');
+    for (var i = 0; i < t.length; i++) t[i].classList.toggle('on', on);
+    li.classList.toggle('is-on', on);
+  }
+  el.querySelectorAll('li').forEach(function (li) {
+    li.addEventListener('mouseenter', function () { set(li, true); });
+    li.addEventListener('mouseleave', function () { set(li, false); });
+    li.addEventListener('focus', function () { set(li, true); });
+    li.addEventListener('blur', function () { set(li, false); });
+  });
+}
+
+function reduceMotion() { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+/* Click effect of the DCS Harness UI Kit chip, ported from the DCS Agentic Harness page with the same numbers.
+   On press: a soft ring of light grows from the pointer (2s), the button dips and rises (1s), and its edge bends: a wave travels outward
+   from the pointer and pushes the outline inward (1.2s). The outline is a polygon of the same squircle shape (corner radius 32, exponent 4),
+   so the edge stays smooth. power scales the ripple (Strength 4 gives the kit's strength). */
+function wavyClip(w, h, cx, cy, k) {
+  var R = Math.min(32, w / 2, h / 2), pts = [], N = 14, step = 5;
+  var amp = 5 * Math.pow(1 - k, 1.8) * Math.min(1, k * 7);           /* swells in fast, dies away slowly */
+  var front = 40 + k * Math.hypot(w, h) * 0.85, wl = 62, kk = 2 * Math.PI / wl;
+  function put(px, py, nx, ny) {
+    var dd = Math.hypot(px - cx, py - cy), g = Math.exp(-Math.pow((dd - front) / 55, 2));
+    var d = amp * g;
+    pts.push((px - nx * d).toFixed(2) + 'px ' + (py - ny * d).toFixed(2) + 'px');
+  }
+  function edge(x0, y0, x1, y1, nx, ny) {
+    var len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.round(len / step));
+    for (var i = 0; i < n; i++) put(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, nx, ny);
+  }
+  function corner(ox, oy, a0) {
+    for (var i = 0; i <= N; i++) {
+      var a = a0 + (Math.PI / 2) * i / N, c = Math.cos(a), s = Math.sin(a);
+      var lx = Math.sign(c) * Math.pow(Math.abs(c), 0.5), ly = Math.sign(s) * Math.pow(Math.abs(s), 0.5);
+      var nx = Math.sign(lx) * Math.pow(Math.abs(lx), 3), ny = Math.sign(ly) * Math.pow(Math.abs(ly), 3), nl = Math.hypot(nx, ny) || 1;
+      put(ox + R * lx, oy + R * ly, nx / nl, ny / nl);
+    }
+  }
+  corner(R, R, Math.PI);                       /* top left */
+  edge(R, 0, w - R, 0, 0, -1);
+  corner(w - R, R, -Math.PI / 2);              /* top right */
+  edge(w, R, w, h - R, 1, 0);
+  corner(w - R, h - R, 0);                     /* bottom right */
+  edge(w - R, h, R, h, 0, 1);
+  corner(R, h - R, Math.PI / 2);               /* bottom left */
+  edge(0, h - R, 0, R, -1, 0);
+  return 'polygon(' + pts.join(',') + ')';
+}
+let chipActive = null, chipRaf = 0;
+function clickFx(el, x, y, power = 1) {   // x, y: the pointer inside the card, in the card's own px
+  if (reduceMotion()) return;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const d = 2 * Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + 24;
+  const sp = document.createElement("span");
+  sp.className = "ripple"; sp.setAttribute("aria-hidden", "true");
+  sp.style.left = x + "px"; sp.style.top = y + "px"; sp.style.width = sp.style.height = d + "px";
+  el.appendChild(sp);
+  const peak = 0.7 * power;
+  const ra = sp.animate([
+    { transform: "translate(-50%,-50%) scale(0.04)", opacity: 0 },
+    { transform: "translate(-50%,-50%) scale(0.3)", opacity: peak, offset: 0.12 },
+    { transform: "translate(-50%,-50%) scale(0.78)", opacity: peak * 0.5, offset: 0.55 },
+    { transform: "translate(-50%,-50%) scale(1.05)", opacity: 0 }
+  ], { duration: 2000, delay: 0, easing: "cubic-bezier(0.0, 0.0, 0.2, 1)", fill: "backwards" });
+  ra.onfinish = ra.oncancel = () => sp.remove();
+  /* tilt: the pressed spot dips, the opposite side lifts, then the button settles with a small rise */
+  const nx = (x / w - 0.5) * 2, ny = (y / h - 0.5) * 2, A = 7;
+  const tf = (k, sc) => "perspective(700px) rotateX(" + (-ny * A * k).toFixed(2) + "deg) rotateY(" + (nx * A * k * Math.min(1, 120 / w * 2)).toFixed(2) + "deg) scale(" + sc + ")";
+  el.animate([
+    { transform: tf(0, 1) },
+    { transform: tf(1, 0.985), offset: 0.2 },
+    { transform: tf(-0.35, 1.012), offset: 0.55 },
+    { transform: tf(0.1, 1.003), offset: 0.8 },
+    { transform: tf(0, 1) }
+  ], { duration: 1000, easing: "cubic-bezier(0.22, 0.8, 0.3, 1)" });
+  if (chipActive && chipActive !== el) chipActive.style.clipPath = "";
+  chipActive = el;
+  const t0 = performance.now(); cancelAnimationFrame(chipRaf);
+  (function step(now) {
+    const k = Math.min(1, Math.max(0, (now - t0) / 1200));
+    el.style.clipPath = wavyClip(w, h, x, y, k);
+    if (k < 1) chipRaf = requestAnimationFrame(step); else { el.style.clipPath = ""; chipActive = null; }
+  })(t0);
+}
+
+/* 1. Card */
+document.getElementById('spCard').innerHTML = '<div data-fit="380" style="zoom:1.35">' + card({
+  role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'running', tid: 't-02', task: 'Build the plan cards', cost: '$0.27', time: '23s', fold: 3,
+  pins: { shell: 1, card: 2, ava: 3, name: 4, model: 5, pill: 6, tid: 7, task: 8, meta: 9, cost: 10, time: 11, fold: 12 }
+}) + '</div>';
+legend(document.getElementById('lgCard'), [
+  ['Container', 'Holds the card and the meta row. It has the color of the avatar box (the kit\'s parchment), so it shows as a darker frame. The card is inset by 4px.', ['--parchment', 'radius 36', 'padding 4', 'squircle']],
+  ['Card', 'The Chip surface from the kit: a flat fill, a 32px squircle radius, no border and no shadow. It holds the avatar, the name, the status and the task.', ['--surface', 'radius 32', 'padding 24']],
+  ['Avatar', 'The pi box of the DCS Agentic Harness page. It has the color of the page, so it stands out from the card fill. The letter is the first letter of the name, in the role color.', ['40 × 40', 'radius 13, squircle', 'fill parchment', 'no border']],
+  ['Name', 'The agent role in plain words: Captain, Worker or Reviewer. It is the first thing a reader scans.', ['600 weight']],
+  ['Model', 'The model that runs this agent. It stays on one line in muted text.', ['11.5px', '--ink-3']],
+  ['Status pill', 'An icon and a label on a tinted background. A running agent has a spinning icon.', ['--run / --done / --fail / --ask', 'data-status']],
+  ['Task id', 'The dcs task this agent works on. It lets a reader match a card to the plan. A live run shows the dcs id, such as t2. The demo shows t-02.', ['t2 or t-02', '--ink-3']],
+  ['Task text', 'What the agent does, in one short phrase. It is cut off after two lines. The full text shows as a tooltip.', ['2-line clamp', '--ink-2']],
+  ['Meta row', 'The cost, the time and the fold button. It sits under the card, inside the container. Its text lines up with the content of the card.', ['padding 14 / 28', '--ink-3']],
+  ['Cost', 'Dollars spent. For a card with children, this is the whole branch.', ['tabular numbers', '500 weight']],
+  ['Time', 'Run time, or the span of the branch. It sits next to the cost and uses muted text.', ['mm ss format']],
+  ['Fold button', 'The number of direct sub-agents and a chevron. It appears only when the card has children. The chevron turns when the branch is folded.', ['aria-expanded', 'button']]
+]);
+
+/* 2. Surface states */
+document.getElementById('spSurface').innerHTML =
+  '<div class="eyebrow" style="margin-bottom:10px">Default</div>' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-01', task: 'Spec the pricing screen', cost: '$0.10', time: '10s', pins: { card: 1 } }) +
+  '<div class="eyebrow" style="margin:22px 0 10px">Hover</div>' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-02', task: 'Build the plan cards', cost: '$0.27', time: '23s', pins: { card: 2 } }) +
+  '<div class="eyebrow" style="margin:22px 0 10px">Selected (Root card, expanded)</div>' + card({ role: 'captain', name: 'Captain', model: 'Opus 5.5', status: 'done', task: 'Run the plan: checkout redesign', cost: '$0.82', time: '39s', fold: 4, pins: { card: 3 } }) +
+  '<div class="eyebrow" style="margin:22px 0 10px">Running</div>' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'running', tid: 't-03', task: 'Wire up checkout', cost: '$0.16', time: '13s', pins: { card: 4 } }) +
+  '<div class="eyebrow" style="margin:22px 0 10px">Click to expand, pick up and release</div><div id="fxHost">' + card({ role: 'captain', name: 'Captain', model: 'Opus 5.5', status: 'done', task: 'Run the plan: checkout redesign', cost: '$0.82', time: '39s', fold: 4, pins: { card: 5 } }) + '</div><button type="button" class="btn replay" id="fxReplay">Replay effect</button>';
+(function () {
+  var cs = document.querySelectorAll('#spSurface .card');
+  cs[1].classList.add('is-hover'); cs[1].style.setProperty('--mx', '78%'); cs[1].style.setProperty('--my', '20%');
+  cs[2].classList.add('is-selected');
+  cs[4].classList.add('is-selected');
+  var host = document.getElementById('fxHost');
+  function play(e) {
+    var c = host.querySelector('.card'), r = c.getBoundingClientRect();
+    var x = e && e.clientX ? e.clientX - r.left : r.width * 0.82, y = e && e.clientY ? e.clientY - r.top : r.height * 0.8;
+    clickFx(c, x, y);
+  }
+  host.querySelector('.fold').addEventListener('click', play);
+  document.getElementById('fxReplay').addEventListener('click', function () { play(null); });
+  document.querySelectorAll('.sp .card').forEach(function (c) {
+    c.addEventListener('pointermove', function (e) { var r = c.getBoundingClientRect(); c.style.setProperty('--mx', (e.clientX - r.left) + 'px'); c.style.setProperty('--my', (e.clientY - r.top) + 'px'); });
+  });
+})();
+legend(document.getElementById('lgSurface'), [
+  ['Default', 'The fill is the kit token surface (bone). Radius is 32px with a squircle corner. Padding is 24px on all four sides, so the space around the content is even. There is no border and no shadow.', ['surface', 'radius 32', 'padding 24', 'corner-shape: squircle']],
+  ['Hover', 'A faint hover fill, a half violet glow inside the edge, grain, and a shine that follows the cursor. It fades in over 200ms and out over 380ms. Every card has it.', ['surface-hover 20%', 'glow 26% / 20%', 'shine 1.5px', 'ease-standard']],
+  ['Selected', 'The full glow and grain stay on. Only the Root card uses it. It starts when the user expands the Captain branch and ends when the user folds it.', ['glow 52% / 40%', 'grain', 'no shine']],
+  ['Running', 'A line and an orchid inner glow travel round the edge of a running card. An arc of 150° fades in at the tail and out at the tip. Both have grain. One lap takes 2.6 seconds, and each card starts at its own point.', ['arc 150°', '2.6s a lap', 'line 1.5px', 'glow 12px / 28px']],
+  ['Click, pick up, release', 'The click effect of the kit\'s chip buttons. It plays when the Root card is expanded, and when a card is picked up and let go. A soft radial ring of light grows from the pointer. The card dips and rises. A wave travels out from the pointer and bends the edge inward by up to 5px.', ['ripple 2000ms, peak 0.7', 'tilt 7° 1000ms', 'edge bend 1200ms', 'grain']]
+]);
+
+/* 3. Tree: the cards, then the bezier wires drawn from their measured boxes */
+(function () {
+  function lane(headO, kids) {
+    var stack = kids.length ? '<ul class="stack" role="group">' + kids.map(function (k) { return '<li>' + card(k) + '</li>'; }).join('') + '</ul>' : '';
+    return '<li class="lane" role="treeitem" aria-expanded="true">' + card(headO) + stack + '</li>';
+  }
+  var head1 = { role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-01', task: 'Spec the pricing screen', cost: '$0.14', time: '14s', fold: 2, pins: { shell: 6 } };
+  var r1 = { role: 'reviewer', name: 'Reviewer', model: 'Haiku 5.5', status: 'done', tid: 't-01', task: 'Pass: ac', cost: '$0.02', time: '4s', pins: { shell: 9 } };
+  var r2 = { role: 'reviewer', name: 'Reviewer', model: 'Haiku 5.5', status: 'done', tid: 't-01', task: 'Pass: security', cost: '$0.02', time: '5s' };
+  var head2 = { role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'failed', tid: 't-03', task: 'Wire up checkout', cost: '$0.22', time: '19s', fold: 1 };
+  var r3 = { role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'running', tid: 't-03', task: 'Retry: wire up checkout', cost: '$0.08', time: '7s' };
+  var stage = document.getElementById('spTree');
+  stage.innerHTML = '<div data-fit="696" id="treeWrap" style="width:696px;margin:0 auto;position:relative">' +
+    '<div class="sumbar" style="max-width:696px;margin:0 auto"' + at(1) + ' data-side="L"><span class="title">' + SPARK + 'Agents</span>' +
+      '<span>6 agents</span><span class="is-run">2 running</span><span class="is-fail failchip">1 failed ' + FAILCHEV + '</span><span class="total"' + at(2) + '>$0.50</span></div>' +
+    '<svg class="wires" id="swires" aria-hidden="true"></svg>' +
+    '<ul class="tree" role="tree" aria-label="Agents started by the Captain"><li class="n--root" role="treeitem" aria-expanded="true">' +
+      card({ role: 'captain', name: 'Captain', model: 'Opus 5.5', status: 'running', task: 'Run the plan: checkout redesign', cost: '$0.50', time: '39s', fold: 2, pins: { shell: 3 } }) +
+      '<ul class="lanes" role="group">' + lane(head1, [r1, r2]) + lane(head2, [r3]) + '</ul></li></ul>' +
+    '<svg class="wires wires--dots" id="sdots" aria-hidden="true"></svg></div>';
+  /* Draw the wires from the measured boxes. z is the zoom the stage applies to fit the specimen. */
+  stage.__after = function (z) {
+    var wrap = document.getElementById('treeWrap'), wr = wrap.getBoundingClientRect();
+    function box(li) { var r = li.querySelector(':scope > .shell').getBoundingClientRect(); return { x: (r.left - wr.left) / z, y: (r.top - wr.top) / z, w: r.width / z, h: r.height / z }; }
+    var root = wrap.querySelector('.n--root'), rb = box(root), lanes = root.querySelector('.lanes');
+    var paths = '', flows = [], dots = '', sx = rb.x + rb.w / 2, sy = rb.y + rb.h;
+    dots += '<circle cx="' + sx + '" cy="' + sy + '" r="5"' + at(4) + '/>';
+    lanes.querySelectorAll(':scope > .lane').forEach(function (lane, li) {
+      var b = box(lane), ex = b.x + b.w / 2, ey = b.y, k = (ey - sy) * 0.6;
+      var lit = !!lane.querySelector('.card[data-status="running"]'), dl = 'M' + sx + ' ' + sy + ' C' + sx + ' ' + (sy + k) + ' ' + ex + ' ' + (ey - k) + ' ' + ex + ' ' + ey;
+      paths += '<path' + (lit ? ' class="is-run"' : '') + ' d="' + dl + '"' + (li === 0 ? at(5) : (lit ? at(10) : '')) + '/>';
+      if (lit) flows.push(dl);
+      var stack = lane.querySelector(':scope > .stack'); if (!stack) return;
+      var dx = b.x + 20, dy = b.y + b.h;
+      dots += '<circle cx="' + dx + '" cy="' + dy + '" r="5"' + (li === 0 ? at(7) : '') + '/>';
+      stack.querySelectorAll(':scope > li').forEach(function (m, mi) {
+        var mb = box(m), mx = mb.x, my = mb.y + 48;
+        var ml = !!m.querySelector('.card[data-status="running"]'), dm = 'M' + dx + ' ' + dy + ' Q' + dx + ' ' + my + ' ' + mx + ' ' + my;
+        paths += '<path' + (ml ? ' class="is-run"' : '') + ' d="' + dm + '"' + (li === 0 && mi === 0 ? at(8) : '') + '/>';
+        if (ml) flows.push(dm);
+      });
+    });
+        var svg = document.getElementById('swires'); svg.innerHTML = paths;
+    var gl = '', co = '';
+    flows.forEach(function (d) {
+      var t = document.createElementNS('http://www.w3.org/2000/svg', 'path'); t.setAttribute('d', d); svg.appendChild(t);
+      var len = t.getTotalLength(); svg.removeChild(t);
+      gl += flowLayers(d, len, 'glow', stack(10, 0.7), 9); co += flowLayers(d, len, 'core', stack(28, 0.88), 2);
+    });
+    svg.innerHTML = paths + '<g class="flows flows--glow">' + gl + '</g><g class="flows flows--core">' + co + '</g>'; document.getElementById('sdots').innerHTML = dots;
+  };
+})();
+legend(document.getElementById('lgTree'), [
+  ['Summary bar', 'One line above the tree. It shows the agent count, the running count, and the failed and needs-input counts. The last two show only when above zero.', ['aria-live="polite"', 'tabular numbers']],
+  ['Total cost', 'The sum of own cost for every agent. It always equals the Captain card.', ['600 weight']],
+  ['Root card', 'The Captain, centered above the columns. Its cost and time cover every column.', ['role=treeitem', 'width 336']],
+  ['Ring dot', 'A small ring on the bottom edge of the Root card. The wires start here. The fill is the color of the page, so the ring looks hollow.', ['10px', '2px ring', 'orchid']],
+  ['Bezier wire', 'A smooth S-curve from the ring dot to the top edge of a head card. It leaves and arrives straight, so it meets the card at a right angle.', ['2px', 'orchid #8833ff', '72px tall']],
+  ['Head card', 'The first agent of a task. It sits at the top of its column. Its cost and time cover the whole column.', ['width 336', 'gap 24 between columns']],
+  ['Rail dot', 'A ring dot on the bottom edge of the head card, 20px in from the left. The wires of the column cards start here.', ['10px', '2px ring', 'left offset 20px']],
+  ['Rail wire', 'A curve from the rail dot to the left edge of a column card, at the height of its header. It runs down, then sweeps into the card.', ['2px', 'orchid', 'ends 48px below the card top']],
+  ['Column card', 'Another agent of the same task. The Captain started it, and it hangs on the rail of its task. Cards show in start order with 24px between them.', ['gap 24', 'indent 48', 'same card as Part 1']],
+  ['Lit wire', 'The wire into a task is lit while that agent, or any agent under it, is running. It is a lighter orchid, with a comet of light that travels from the parent to the child. The comet has the shine of a running card: a light line with grain and a violet glow. It fades in slowly at the tail and out faster at the tip, with no visible step. It goes back to plain orchid when the task is done. With reduced motion the comet is off and only the color shows.', ['#a561ff', 'comet 42% of the wire', '120px a second']]
+]);
+
+/* The lit wire comet, as in agent-tree.html: a stack of dashes of different lengths, centred on one point. Where they overlap, their opacities add up. */
+var COMET = 42, PEAK = 0.68, WIRE_SPEED = 120, stackCache = {};
+function stack(n, peak) {
+  var key = n + ':' + peak;
+  if (!stackCache[key]) {
+    var weight = function (j) { return 0.3 + 0.7 * (n === 1 ? 1 : j / (n - 1)); };
+    var reach = function (k) { var p = 1; for (var j = 0; j < n; j++) p *= 1 - k * weight(j); return 1 - p; };
+    var lo = 0, hi = 1;
+    for (var i = 0; i < 30; i++) { var mid = (lo + hi) / 2; reach(mid) < peak ? (lo = mid) : (hi = mid); }
+    var out = []; for (var j = 0; j < n; j++) out.push([COMET * (1 - Math.sqrt(j / n)), +(lo * weight(j)).toFixed(4)]);
+    stackCache[key] = out;
+  }
+  return stackCache[key];
+}
+function flowLayers(d, len, cls, layers, width) {
+  var dur = Math.min(4.4, Math.max(1.6, len / WIRE_SPEED)), delay = -((performance.now() / 1000) % dur);
+  var tipReach = (1 - PEAK) * COMET, tailReach = PEAK * COMET;
+  return layers.map(function (l) {
+    return '<path class="flow ' + cls + '" pathLength="100" d="' + d + '" stroke-dasharray="' + l[0].toFixed(2) + ' 300" style="--o0:' + (PEAK * l[0] + tipReach).toFixed(2) + ';--o1:' + (PEAK * l[0] - (100 + tailReach)).toFixed(2) + ';animation-duration:' + dur.toFixed(2) + 's;animation-delay:' + delay.toFixed(3) + 's;stroke-opacity:' + l[1] + ';stroke-width:' + width + '"/>';
+  }).join('');
+}
+
+/* 4. Canvas: a small canvas you can drag. It has the motion of agent-tree.html: Tilt 6, Strength 4, Elevation 2. */
+(function () {
+  var stage = document.getElementById('spCanvas');
+  var a = { role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-02', task: 'Build the plan cards', cost: '$0.27', time: '23s', pins: { shell: 2 } };
+  var b = { role: 'reviewer', name: 'Reviewer', model: 'Haiku 5.5', status: 'done', tid: 't-02', task: 'Pass: ac', cost: '$0.02', time: '5s', pins: { shell: 3 } };
+  var c = { role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'running', tid: 't-04', task: 'Write the release notes', cost: '$0.06', time: '6s' };
+  stage.innerHTML = '<div class="minicanvas" data-pin="1" data-side="L">' +
+    '<div class="gi" style="left:48px;top:48px">' + card(a) + '<div class="gi" style="left:48px;top:240px">' + card(b) + '</div></div>' +
+    '<div class="gi" style="left:408px;top:96px">' + card(c) + '</div></div>';
+  var cv = stage.querySelector('.minicanvas');
+  var GRID = 24, STK = { tilt: 6, strength: 4, elevation: 2, sens: 3, smoothing: 0.05, liftSpeed: 1.92, settle: 0.9, persp: 800 }, ELEV = STK.elevation / 10 * 0.3;
+  var drag = null, raf = 0, lastTs = 0;
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function smooth(t) { return t * t * (3 - 2 * t); }
+  function lerp(p, q, t) { return p + (q - p) * t; }
+  function easeOutBack(t) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
+  function still() { return matchMedia('(prefers-reduced-motion: reduce)').matches; }
+  function setO(g, o) { g.__o = o; g.style.transform = (o.x || o.y) ? 'translate(' + o.x + 'px,' + o.y + 'px)' : ''; }
+  cv.querySelectorAll('.gi').forEach(function (g) { g.__o = { x: 0, y: 0 }; });
+  function rippleAt(g, x, y) {
+    var cd = g.querySelector(':scope > .shell > .card'), r = cd.getBoundingClientRect();
+    clickFx(cd, (x - r.left) * cd.offsetWidth / r.width, (y - r.top) * cd.offsetHeight / r.height, STK.strength / 4);
+  }
+  function paint(d) {
+    var e = smooth(d.lift), s = still();
+    d.shells.forEach(function (sh) {
+      sh.style.transform = s ? '' : 'perspective(' + STK.persp + 'px) rotateX(' + d.tx.toFixed(3) + 'deg) rotateY(' + d.ty.toFixed(3) + 'deg) scale(' + (1 + ELEV * e).toFixed(4) + ')';
+      sh.style.filter = s ? '' : 'drop-shadow(0 ' + lerp(1, 13, e).toFixed(2) + 'px ' + lerp(2, 14, e).toFixed(2) + 'px var(--drop))';
+    });
+  }
+  function frame(ts) {
+    var d = drag; if (!d || d.mode !== 'active') { raf = 0; return; }
+    var dt = Math.min((ts - (lastTs || ts)) / 1000, 0.1); lastTs = ts;
+    d.lift = d.held ? Math.min(1, d.lift + STK.liftSpeed * dt) : Math.max(0, d.lift - STK.liftSpeed * dt);
+    var decay = Math.pow(STK.settle, dt * 60);
+    if (!d.held) {
+      d.tx *= decay; d.ty *= decay; if (Math.abs(d.tx) < 0.1 && Math.abs(d.ty) < 0.1) { d.tx = 0; d.ty = 0; }
+      var t = Math.min(1, (ts - d.t0) / 280), k = easeOutBack(t);
+      setO(d.g, { x: lerp(d.from.x, d.snap.x, k), y: lerp(d.from.y, d.snap.y, k) }); d.landed = t >= 1;
+    } else if (performance.now() - d.moveT > 60) { d.tx *= 1 - 0.02 * dt * 60; d.ty *= 1 - 0.02 * dt * 60; }
+    paint(d);
+    if (!d.held && d.landed && d.lift === 0 && d.tx === 0 && d.ty === 0) {
+      d.shells.forEach(function (sh) { sh.style.transform = sh.style.filter = sh.style.transformOrigin = ''; });
+      d.g.classList.remove('is-dragging'); setO(d.g, d.snap); drag = null; raf = 0; return;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  cv.addEventListener('pointerdown', function (e) {
+    var sh = e.target.closest('.shell'); if (!sh || e.button !== 0 || drag) return;
+    drag = { mode: 'pending', g: sh.closest('.gi'), sx: e.clientX, sy: e.clientY };
+  });
+  window.addEventListener('pointermove', function (e) {
+    var d = drag; if (!d) return;
+    if (d.mode === 'pending') {
+      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < 4) return;
+      d.mode = 'active'; d.held = true; d.lift = 0; d.tx = 0; d.ty = 0; d.landed = false;
+      d.shells = [].slice.call(d.g.querySelectorAll('.shell')); d.o0 = { x: d.g.__o.x, y: d.g.__o.y };
+      var hr = d.g.querySelector(':scope > .shell').getBoundingClientRect(), cr = cv.getBoundingClientRect();
+      d.baseX = hr.left - cr.left - d.o0.x; d.baseY = hr.top - cr.top - d.o0.y; d.snap = { x: d.o0.x, y: d.o0.y };
+      d.lastX = d.sx; d.lastY = d.sy; d.moveT = performance.now();
+      d.shells.forEach(function (s) { var r = s.getBoundingClientRect(); s.style.transformOrigin = (d.sx - r.left) + 'px ' + (d.sy - r.top) + 'px'; });
+      d.g.classList.add('is-dragging'); lastTs = 0; rippleAt(d.g, d.sx, d.sy);
+      if (!raf) raf = requestAnimationFrame(frame);
+    }
+    if (d.mode !== 'active' || !d.held) return;
+    var o = { x: d.o0.x + e.clientX - d.sx, y: d.o0.y + e.clientY - d.sy }; setO(d.g, o);
+    var now = performance.now(), dt = Math.max(1, now - d.moveT);
+    var vx = ((e.clientX - d.lastX) / dt) * 16, vy = ((e.clientY - d.lastY) / dt) * 16;
+    d.lastX = e.clientX; d.lastY = e.clientY; d.moveT = now;
+    d.ty += (clamp(vx * STK.sens, -STK.tilt, STK.tilt) - d.ty) * STK.smoothing;
+    d.tx += (clamp(-vy * STK.sens, -STK.tilt, STK.tilt) - d.tx) * STK.smoothing;
+    d.snap = { x: Math.round((d.baseX + o.x) / GRID) * GRID - d.baseX, y: Math.round((d.baseY + o.y) / GRID) * GRID - d.baseY };
+  });
+  function up(e) {
+    var d = drag; if (!d) return;
+    if (d.mode === 'pending') { drag = null; return; }
+    if (d.held) { rippleAt(d.g, e.clientX, e.clientY); d.held = false; d.from = { x: d.g.__o.x, y: d.g.__o.y }; d.t0 = performance.now(); lastTs = 0; if (!raf) raf = requestAnimationFrame(frame); }
+  }
+  window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
+})();
+legend(document.getElementById('lgCanvas'), [
+  ['Dotted grid', 'Dots every 24px. The dots are also the snap step. They move and scale with the canvas, and fade out when you zoom far out.', ['24px', '--dot']],
+  ['Head card', 'Drag it to move the whole column: the card and every card that hangs on it. The Captain moves all cards. On release the head card lands on the grid with a small overshoot.', ['moves its column', 'snap 24px', 'lift 6%']],
+  ['Column card', 'Drag it to move only this card. It lifts, leans with the speed of the pointer, and plays the ripple when it is picked up and let go.', ['moves alone', 'Tilt 6', 'Strength 4']]
+]);
+
+/* 5. Status */
+(function () {
+  var rows = [
+    ['running', 'Running', 'The agent works now. The icon spins, and the shine travels round the card. The cost and time increase each tick.', ['--run', '--run-bg']],
+    ['done', 'Done', 'The agent finished. Cost and time stop.', ['--done', '--done-bg']],
+    ['failed', 'Failed', 'The agent stopped with an error. The tooltip shows the reason.', ['--fail', '--fail-bg']],
+    ['needs_input', 'Needs input', 'The agent asks a question and waits. Cost stops until an answer arrives.', ['--ask', '--ask-bg']]
+  ];
+  document.getElementById('spStatus').innerHTML = '<div class="states">' + rows.map(function (r, i) {
+    return '<span class="pill" data-status="' + r[0] + '"' + at(i + 1) + '>' + ICON[r[0]] + r[1] + '</span>';
+  }).join('') + '</div><div style="height:28px"></div>' +
+    card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'failed', tid: 't-04', task: 'Write the release notes', cost: '$0.04', time: '9s' });
+  legend(document.getElementById('lgStatus'), rows.map(function (r) { return [r[1], r[2], r[3]]; }));
+})();
+
+/* 6. Fold */
+document.getElementById('spFold').innerHTML =
+  '<div class="eyebrow">Open</div>' +
+  '<div style="max-width:380px">' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-02', task: 'Build the plan cards', cost: '$0.27', time: '23s', fold: 3, pins: { fold: 1 } }) + '</div>' +
+  '<div class="eyebrow" style="margin-top:14px">Folded</div>' +
+  '<div style="max-width:380px">' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't-02', task: 'Build the plan cards', cost: '$0.27', time: '23s', fold: 3, open: false }) +
+  '<div style="height:8px"></div><button type="button" class="one"' + at(2) + '>' +
+    '<span' + at(3) + ' data-side="B" style="font-variant-numeric:tabular-nums"><b>3</b> sub-agents</span><span>·</span>' +
+    '<span class="tally"' + at(4) + ' data-side="B"><span class="dot" data-s="done"></span>2 done<span class="dot" data-s="running"></span>1 running</span><span>·</span>' +
+    '<span' + at(5) + ' data-side="B" style="font-variant-numeric:tabular-nums">$0.12</span></button></div>';
+legend(document.getElementById('lgFold'), [
+  ['Fold button', 'Click it to fold or unfold. The chevron points down when open and right when folded. The count stays the same.', ['aria-expanded']],
+  ['Folded line', 'One dashed line that replaces the child cards. Click it to unfold. It is a button, so the keyboard works.', ['dashed 1px', 'radius 8', 'full width']],
+  ['Sub-agent count', 'The number of agents hidden in the branch, at every depth.'],
+  ['Status tally', 'A dot and a count for each status in the hidden branch. A reader sees a failure without opening the branch.', ['dot 7px', 'status colors']],
+  ['Hidden cost', 'The cost of the hidden agents only. The card above still shows the full branch cost.', ['own cost excluded']]
+]);
+
+/* 10. Live data */
+document.getElementById('spLive').innerHTML =
+  '<span class="mode" data-mode="live"' + at(4) + ' data-side="B" style="margin-bottom:30px">Live · r-20261025-5f2f4f · 2s ago</span>' +
+  '<div style="max-width:380px">' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'running', tid: 't2', task: 'Build the plan cards', cost: '~$0.12', time: '23s', pins: { cost: 1 } }) + '</div>' +
+  '<div style="max-width:380px">' + card({ role: 'worker', name: 'Worker', model: 'Sonnet 5.5', status: 'done', tid: 't1', task: 'Spec the pricing screen', cost: '$0.12', time: '43s', pins: { cost: 2 } }) + '</div>' +
+  '<div style="max-width:380px">' + card({ role: 'worker', name: 'Worker', model: 'Mystery 1', status: 'running', tid: 't3', task: 'A model with no price', cost: '—', time: '8s', pins: { cost: 3 } }) + '</div>' +
+'';
+legend(document.getElementById('lgLive'), [
+  ['Cost still counting', 'A tilde before the amount. The agent runs and its tokens grow. The same mark shows on a branch that holds a running agent.', ['~$0.12']],
+  ['Final cost', 'No tilde. The agent has stopped, so the amount is complete.', ['$0.12']],
+  ['No price', 'A dash. The model is not in the price table. The page does not guess a cost.', ['—']],
+  ['Status label', 'Next to the title. It shows the mode and, in live mode, the run and the age of the last update. The dot is blue for live, amber for replay and red when disconnected.', ['Live', 'Replay', 'Disconnected']]
+]);
+
+/* 11. Failed list */
+document.getElementById('spFail').innerHTML =
+  '<div class="sumbar" style="padding-bottom:10px"><span class="title">' + SPARK + 'Agents</span><span>7 agents</span><span class="is-run">0 running</span><span class="is-fail failchip"' + at(1) + '>1 failed ' + FAILCHEV + '</span><span class="total">$0.83</span></div>' +
+  '<div class="failbar"><div class="failpop" role="region" aria-label="Failed agents"><div class="failrow">' +
+    '<span class="failrow__icon"' + at(2) + '>' + ICON.failed.replace('width="12" height="12"', 'width="16" height="16"') + '</span>' +
+    '<div class="failrow__head"' + at(3) + '><span class="failrow__name">Worker</span><span class="failrow__task">t2 Build KPI card from Figma</span></div>' +
+    '<div class="failrow__why"' + at(4) + '>The kpi-render executable is not installed, so the render check cannot run. The reference image is missing.</div>' +
+    '<div class="failrow__acts"><button class="btn" type="button"' + at(5) + '>Dismiss</button><button class="btn btn--primary" type="button"' + at(6) + '>Show card</button></div>' +
+  '</div></div></div>';
+legend(document.getElementById('lgFail'), [
+  ['Failed count', 'A pill in the Failed colors, with a chevron. It counts the failed agents that you have not dismissed. It shows only when the count is above zero.', ['pill', '--fail', '--fail-bg']],
+  ['Icon', 'The Failed icon in a 32px circle with the Failed colors.', ['32px', 'circle']],
+  ['Agent and task', 'The name of the agent in bold, then its task id and task text.', ['600', '14px']],
+  ['Reason', 'The reason from the last reply of the agent. A long reason shows four lines, and the tooltip holds the full text.', ['4 lines', 'tooltip']],
+  ['Dismiss', 'Removes the entry from the list and lowers the count. The card stays Failed.', ['secondary button']],
+  ['Show card', 'Pans the canvas to the card of that agent. The tree has no Retry button, because the page cannot start an agent.', ['primary button']]
+]);
+
+/* 7. Roles */
+document.getElementById('roleRows').innerHTML = [
+  ['captain', 'Captain', 'Opus 5.5', 'The harness run', '$0.020 per second'],
+  ['worker', 'Worker', 'Sonnet 5.5', 'The Captain', '$0.012 per second'],
+  ['reviewer', 'Reviewer', 'Haiku 5.5', 'The Captain', '$0.004 per second']
+].map(function (r) {
+  return '<tr><td>' + r[1] + '</td><td><span class="ava" data-role="' + r[0] + '">' + r[1][0] + '</span></td><td class="mono">' + r[2] + '</td><td>' + r[3] + '</td><td class="mono">' + r[4] + '</td></tr>';
+}).join('');
+
+/* 8. Tokens */
+(function () {
+  var t = [['--app-page', 'Page and canvas (#23221D in dark)'], ['--parchment', 'Container and avatar box (kit: parchment)'], ['--surface', 'Card surface (kit: bone)'], ['--hover-fill', 'Hover fill (kit: surface-hover)'], ['--glow-b', 'Hover and selected glow'], ['--orchid', 'Wires, ring dots, running glow (kit: Orchid-500)'], ['--dot', 'Grid dots'], ['--run', 'Running'], ['--done', 'Done'], ['--fail', 'Failed'], ['--ask', 'Needs input'], ['--wait', 'Neutral: the mode dot'], ['--pin', 'Anatomy pin (this page only)']];
+  document.getElementById('tokens').innerHTML = t.map(function (x) {
+    return '<div class="swatch"><i style="background:var(' + x[0] + ')"></i><span><b style="font-weight:500">' + x[1] + '</b><br><code>' + x[0] + '</code></span></div>';
+  }).join('');
+})();
+
+
+/* Place numbered pins in the left and right gutters and draw a leader line to each part. */
+function annotate(stage) {
+  stage.querySelectorAll('.lead, .pin').forEach(function (n) { n.remove(); });
+  stage.style.minHeight = '';
+  var fit = stage.querySelector('[data-fit]');
+  if (fit) {
+    var room = stage.clientWidth - parseFloat(getComputedStyle(stage).paddingLeft) * 2;
+    fit.style.zoom = Math.max(0.3, Math.min(1.35, room / +fit.dataset.fit));
+  }
+  if (stage.__after) stage.__after(fit ? +fit.style.zoom : 1);   // draw the wires of the tree specimen at the zoom just set
+  var box = stage.getBoundingClientRect();
+  var sl = stage.scrollLeft, st = stage.scrollTop;
+  var parts = Array.prototype.slice.call(stage.querySelectorAll('[data-pin]')).map(function (el) {
+    var r = el.getBoundingClientRect();
+    return { n: +el.dataset.pin, force: el.dataset.side, b: r.bottom - box.top + st, l: r.left - box.left + sl, r: r.right - box.left + sl, cy: r.top + r.height / 2 - box.top + st };
+  }).sort(function (a, b) { return a.n - b.n; });
+  if (!parts.length) return;
+  var minL = Math.min.apply(null, parts.map(function (p) { return p.l; }));
+  var maxR = Math.max.apply(null, parts.map(function (p) { return p.r; }));
+  var mid = (minL + maxR) / 2, gl = minL - 30, gr = maxR + 30;
+  var below = parts.filter(function (p) { return p.force === 'B'; });
+  parts = parts.filter(function (p) { return p.force !== 'B'; });
+  var sides = { L: [], R: [] };
+  parts.forEach(function (p) { p.side = p.force || ((p.l + p.r) / 2 < mid ? 'L' : 'R'); sides[p.side].push(p); });
+  ['L', 'R'].forEach(function (k) {
+    var list = sides[k].sort(function (a, b) { return a.cy - b.cy; }), prev = -1e9;
+    list.forEach(function (p) { p.py = Math.max(p.cy, prev + 28); prev = p.py; });
+  });
+  var NS = 'http://www.w3.org/2000/svg';
+  var allParts = parts.concat(below);
+  var svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'lead');
+  svg.setAttribute('width', stage.scrollWidth); svg.setAttribute('height', stage.scrollHeight + 60);
+  parts.forEach(function (p) {
+    var ex = p.side === 'L' ? p.l : p.r, gx = p.side === 'L' ? gl : gr;
+    var path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M' + ex + ' ' + p.cy + ' L' + (gx + (p.side === 'L' ? 11 : -11) ) + ' ' + p.py);
+    svg.appendChild(path);
+    var dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('cx', ex); dot.setAttribute('cy', p.cy); dot.setAttribute('r', 2.5);
+    svg.appendChild(dot);
+    var pin = document.createElement('i');
+    pin.className = 'pin'; pin.textContent = p.n;
+    pin.style.left = gx + 'px'; pin.style.top = p.py + 'px';
+    stage.appendChild(pin);
+  });
+  below.forEach(function (p) {
+    var cx = (p.l + p.r) / 2, py = p.b + 30;
+    var path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M' + cx + ' ' + p.b + ' L' + cx + ' ' + (py - 11));
+    svg.appendChild(path);
+    var dot = document.createElementNS(NS, 'circle');
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', p.b); dot.setAttribute('r', 2.5);
+    svg.appendChild(dot);
+    var pin = document.createElement('i');
+    pin.className = 'pin'; pin.textContent = p.n;
+    pin.style.left = cx + 'px'; pin.style.top = py + 'px';
+    stage.appendChild(pin);
+  });
+  stage.insertBefore(svg, stage.firstChild);
+  var need = Math.max.apply(null, parts.map(function (p) { return p.py; })) + 24;
+  if (need > stage.scrollHeight) stage.style.minHeight = need + 'px';
+}
+function annotateAll() { document.querySelectorAll('.stage--ann').forEach(annotate); }
+window.addEventListener('load', annotateAll);
+window.addEventListener('resize', annotateAll);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(annotateAll);
+annotateAll();
+
+/* Theme toggle */
+document.getElementById('theme').addEventListener('click', function () {
+  var el = document.documentElement;
+  var dark = el.dataset.theme ? el.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  el.dataset.theme = dark ? 'light' : 'dark';
+});
+</script>

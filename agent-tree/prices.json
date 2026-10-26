@@ -1,0 +1,40 @@
+{
+  "_note": "US dollars per million tokens. Input and output come from the claude-api skill model table (cached 2026-10-06). cacheRead for fable-5-1, opus-5-5 and sonnet-5-5 is stated in the same skill. Observed on 2026-10-25: a real dcs run on claude-sonnet-5-5 (262,559 five-minute and 76,910 one-hour cache-write tokens) matches the Claude Code total to 0.13% when five-minute writes cost the input price ($2.00) and one-hour writes cost 2x ($4.00). The same rule is applied to the other models and is NOT verified for them. The haiku cacheRead (0.1 x input) is assumed.",
+  "models": {
+    "claude-fable-5-1": {
+      "input": 10.0,
+      "output": 50.0,
+      "cacheWrite5m": 10.0,
+      "cacheWrite1h": 20.0,
+      "cacheRead": 0.25
+    },
+    "claude-opus-5-5": {
+      "input": 4.0,
+      "output": 20.0,
+      "cacheWrite5m": 4.0,
+      "cacheWrite1h": 8.0,
+      "cacheRead": 0.2
+    },
+    "claude-sonnet-5-5": {
+      "input": 2.0,
+      "output": 10.0,
+      "cacheWrite5m": 2.0,
+      "cacheWrite1h": 4.0,
+      "cacheRead": 0.2
+    },
+    "claude-haiku-5-5": {
+      "input": 0.1,
+      "output": 0.5,
+      "cacheWrite5m": 0.1,
+      "cacheWrite1h": 0.2,
+      "cacheRead": 0.01
+    }
+  },
+  "assumed": [
+    "cacheWrite5m and cacheWrite1h of fable-5-1, opus-5-5 and haiku-5-5 (same rule as sonnet-5-5)",
+    "haiku-5-5 cacheRead"
+  ],
+  "observed": [
+    "claude-sonnet-5-5 cacheWrite5m and cacheWrite1h (Claude Code total within 0.13%)"
+  ]
+}

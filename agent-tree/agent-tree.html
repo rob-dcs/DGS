@@ -1,0 +1,1097 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Tree</title>
+<style>
+:root {
+  --dot: rgba(38, 37, 30, .26); --drop: rgba(0, 0, 0, .30);
+  --orchid: #8833ff; --page: #f7f7f4; --bg: #f7f7f4; --card: #f2f1ed; --ink: #26251e; --ink-2: #66655f; --ink-3: #66655f;
+  --line: #bcd3ee; --rail: #9cc0ea; --border: rgba(38,37,30,.10); --shadow: 0 1px 2px rgba(20,22,26,.06), 0 4px 14px rgba(20,22,26,.04);
+  --run: #1d6fd1; --run-bg: #e3effc;
+  --done: #1a7f4b; --done-bg: #e1f4e9;
+  --fail: #c23030; --fail-bg: #fbe5e5;
+  --ask: #a15c07; --ask-bg: #fbeed7;
+  --wait: #5d6168; --wait-bg: #ececee;
+  --focus: #1d6fd1;
+  --hover-fill: #e6e5e0; --glow-a: #cdb2ff; --glow-b: #a561ff; --shine-line: #e8dcff; --shine-glow: #6b2bf5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --dot: rgba(242, 241, 237, .20); --drop: rgba(0, 0, 0, .60); --orchid: #8833ff; --page: #23221d; --bg: #1a1915; --card: #23221d; --ink: #f2f1ed; --ink-2: #aaa9a2; --ink-3: #8f8e87;
+    --line: #2b4a72; --rail: #3a6296; --border: rgba(242,241,237,.12); --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --run: #6aa8f0; --run-bg: #1c2d44; --done: #55c68a; --done-bg: #17301f; --fail: #f08080; --fail-bg: #3a1c1c;
+    --ask: #f0b95a; --ask-bg: #3a2b12; --wait: #a3a7ae; --wait-bg: #2a2c30; --focus: #6aa8f0; --hover-fill: #2e2d27; }
+}
+:root[data-theme="dark"] { --dot: rgba(242, 241, 237, .20); --drop: rgba(0, 0, 0, .60); --orchid: #8833ff; --page: #23221d; --bg: #1a1915; --card: #23221d; --ink: #f2f1ed; --ink-2: #aaa9a2; --ink-3: #8f8e87;
+  --line: #2b4a72; --rail: #3a6296; --border: rgba(242,241,237,.12); --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --run: #6aa8f0; --run-bg: #1c2d44; --done: #55c68a; --done-bg: #17301f; --fail: #f08080; --fail-bg: #3a1c1c;
+  --ask: #f0b95a; --ask-bg: #3a2b12; --wait: #a3a7ae; --wait-bg: #2a2c30; --focus: #6aa8f0; --hover-fill: #2e2d27; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page);   /* --bg stays the avatar and container colour (parchment) */ color: var(--ink); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; }
+.num { font-variant-numeric: tabular-nums; }
+
+.at { height: 100dvh; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.at__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.at__title { font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.at__spark { color: var(--run); }
+.at__sum { margin-left: auto; display: flex; gap: 14px; color: var(--ink-2); align-items: center; }
+.at__sum .is-run { color: var(--run); } .at__sum .is-ask { color: var(--ask); } .at__sum .is-fail { color: var(--fail); }
+.at__total { color: var(--ink); font-weight: 600; }
+.at__bar { position: relative; z-index: 6; }
+.at__sum .failchip[hidden], .at__sum [hidden] { display: none; }
+.at__sum .failchip { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: 999px; padding: 3px 10px; background: var(--fail-bg); color: var(--fail); cursor: pointer; }
+.at__sum .failchip:hover { filter: brightness(1.08); }
+.failchip svg { transition: transform .2s ease; } .failchip[aria-expanded="true"] svg { transform: rotate(180deg); }
+.failpop { position: absolute; right: 0; top: 36px; width: min(360px, 100%); max-height: 60dvh; overflow: auto; display: grid; gap: 14px; padding: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; corner-shape: squircle; box-shadow: 0 12px 32px var(--drop); }
+.failpop[hidden] { display: none; }
+.failrow { display: grid; grid-template-columns: 32px 1fr; gap: 4px 12px; }
+.failrow + .failrow { padding-top: 14px; border-top: 1px solid var(--border); }
+.failrow__icon { grid-row: span 2; width: 32px; height: 32px; border-radius: 50%; background: var(--fail-bg); color: var(--fail); display: grid; place-items: center; }
+.failrow__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; }   /* a button: it shows the card */
+.failrow__head:hover .failrow__name { text-decoration: underline; }
+.failrow__msg { grid-column: 2; font-size: 12px; color: var(--ink-2); overflow-wrap: anywhere; }
+.failrow__msg.is-error { color: var(--fail); }
+.failrow__acts .btn:disabled { opacity: .55; cursor: default; }
+.failrow__name { font-weight: 600; font-size: 14px; color: var(--ink); }
+.failrow__task { color: var(--ink-3); overflow-wrap: anywhere; }
+.failrow__why { grid-column: 2; color: var(--ink-2); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }   /* a long reason shows four lines; the full text is the tooltip */
+.failrow__acts { grid-column: 2; display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.failrow__acts .btn { border-radius: 999px; padding: 5px 14px; }
+.failrow__acts .btn--primary { background: var(--ink); color: var(--page); border-color: var(--ink); }
+.failrow__acts .btn--primary:hover { filter: brightness(1.12); }
+.at__mode { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 12px; }
+.at__mode::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--wait); }
+.at__mode[data-mode="live"]::before { background: var(--run); }
+.at__mode[data-mode="replay"]::before { background: var(--ask); }
+.at__mode[data-mode="off"]::before { background: var(--fail); }
+.btn[hidden] { display: none; }
+.at__tools { display: flex; gap: 6px; width: 100%; }
+.btn { border: 1px solid var(--border); background: var(--card); border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+.btn:hover { border-color: var(--rail); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* Infinite canvas: a viewport with a dotted grid, and a world that is moved (pan) and scaled (zoom) inside it. */
+.canvas { position: relative; flex: 1; min-height: 360px; overflow: hidden; border-radius: 28px; corner-shape: squircle; background-color: var(--page);
+  background-image: radial-gradient(circle at center, var(--dot) 1.1px, transparent 1.7px); background-size: 24px 24px;
+  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+.canvas.is-panning, .canvas.is-panning .shell { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.at__zoom { color: var(--ink-3); font-variant-numeric: tabular-nums; margin-left: 6px; align-self: center; }
+.tree, .tree ul { list-style: none; margin: 0; padding: 0; }
+.tree { position: relative; z-index: 1; --lane-w: 336px; --lane-gap: 24px; --bus: 72px; width: max-content; display: flex; justify-content: center; }   /* 336, 24 and 72 are multiples of the 24px grid */
+.n--root { display: flex; flex-direction: column; align-items: center; }
+.n--root > .shell, .n--root > .one { width: var(--lane-w); max-width: none; }
+.n { position: relative; }
+
+/* Cards */
+/* Surface: chip, default state. Fill = surface (bone). No border, no glow at rest. Padding is 24px on all four sides. */
+.shell { position: relative; z-index: 2; background: var(--bg); border-radius: 36px; corner-shape: squircle; padding: 4px; cursor: grab; }   /* container: the colour of the avatar box (parchment). 4px around the card; the card radius 32 + 4 = 36 */
+.card { background: var(--card); border-radius: 32px; corner-shape: squircle; padding: 24px; position: relative; }
+/* A new card comes out from behind its parent. Until it has settled it sits under every other card, so it slides out from under its parent and
+   past the cards above it. The motion itself is made in JS (enterCards), because it starts at the parent, which only the layout knows. */
+.n.is-fresh > .shell { z-index: 1; }
+.top { display: flex; align-items: center; gap: 8px; }
+/* Avatar: the "pi" box of the DCS Agentic Harness page. Fill = page colour (parchment), squircle radius of 0.32 of the size (28 of 88), no border. */
+.ava { --ava-captain: #b4492b; --ava-worker: #2a5db0; --ava-reviewer: #25784a;
+  flex: none; width: 40px; height: 40px; border-radius: 13px; corner-shape: squircle; background: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+.ava[data-role="captain"] { color: var(--ava-captain); }
+.ava[data-role="worker"] { color: var(--ava-worker); }
+.ava[data-role="reviewer"] { color: var(--ava-reviewer); }
+:root[data-theme="dark"] .ava { --ava-captain: #e8795a; --ava-worker: #6f9be0; --ava-reviewer: #55c68a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ava { --ava-captain: #e8795a; --ava-worker: #6f9be0; --ava-reviewer: #55c68a; } }
+.who { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.model { white-space: nowrap; color: var(--ink-3); font-size: 11.5px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500; padding: 2px 7px; border-radius: 6px; flex: none; }
+.pill[data-status="running"] { color: var(--run); background: var(--run-bg); }
+.pill[data-status="done"] { color: var(--done); background: var(--done-bg); }
+.pill[data-status="failed"] { color: var(--fail); background: var(--fail-bg); }
+.pill[data-status="needs_input"] { color: var(--ask); background: var(--ask-bg); }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.task { margin: 8px 0 4px; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.task b { color: var(--ink-3); font-weight: 500; margin-right: 4px; }
+.meta { display: flex; align-items: center; justify-content: space-between; color: var(--ink-3); padding: 14px 28px; }   /* the text lines up with the content of the card: 4px + 24px */
+.cost { color: var(--ink); font-weight: 500; } .time { color: var(--ink-3); }
+.fold { display: inline-flex; align-items: center; gap: 3px; border: 0; background: transparent; color: var(--ink-3); border-radius: 6px; padding: 2px 6px; margin: -4px -6px -4px 0; cursor: pointer; }   /* the tap area overhangs the padding, so the chevron lines up with the content of the card */
+.fold:hover { background: var(--wait-bg); color: var(--ink); }
+.fold svg { transition: transform .2s; }
+.fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+
+/* Folded branch: one summary line */
+.one { display: flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 10px; border: 1px dashed var(--rail); border-radius: 8px; color: var(--ink-2); font-size: 12px; background: transparent; width: 100%; text-align: left; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.one:hover { background: var(--card); }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.dot[data-s="running"] { background: var(--run); } .dot[data-s="done"] { background: var(--done); }
+.dot[data-s="failed"] { background: var(--fail); } .dot[data-s="needs_input"] { background: var(--ask); }
+
+/* Stacked connectors (deeper levels) */
+.tree .stack { --gap: 24px; --elbow: 48px; margin: 0 0 0 20px; padding-top: var(--gap); }   /* --gap: space between cards. --elbow: height of the card header centre. */
+.stack > .n { width: auto; padding-left: 28px; margin-bottom: var(--gap); }
+.stack > .n:last-child { margin-bottom: 0; }
+.stack > .n > .shell { width: 100%; }
+
+/* Drag: the card that moves is raised above the others. */
+.n.is-dragging { z-index: 20; }
+/* Wires: bezier curves in orchid, drawn in an SVG layer (see drawWires). */
+.wires { position: absolute; left: 0; top: 0; width: 1px; height: 1px; z-index: 0; pointer-events: none; overflow: visible; }   /* the curves run under the cards */
+.wires--dots { z-index: 4; }   /* the ring dots run over them, so they show whole */
+.wires path { fill: none; stroke: var(--orchid); stroke-width: 2; stroke-linecap: round; }
+.wires circle { fill: var(--page); stroke: var(--orchid); stroke-width: 2; }
+/* A wire into a running task is lit, with the same shine that runs round the edge of a running card:
+   a light line (the card's --shine-line, with the grain of the kit's ring and a soft violet glow) and an orchid glow with grain.
+   Like the card's arc, the comet fades in slowly at the tail and fades out at the tip. It travels from the parent to the child.
+   Each part is a few stacked dashes of different length, centred on the same point, so their opacities add up to that fade. */
+.wires path.is-run:not(.flow) { stroke: #a561ff; }
+.wires .wire-new { animation: wire-in .65s ease-out .1s both; }   /* the wire of a new card fades in while the card comes out */
+@keyframes wire-in { from { opacity: 0; } }   /* a lighter wire marks the task even when the pulse is off */
+.wires .flow { display: none; fill: none; stroke-linecap: round; stroke-dashoffset: var(--o0); }
+.wires .flow.is-run { display: block; animation: wire-flow 2s linear infinite; }   /* the duration is set on each layer from WIRE_SPEED */
+.wires .flow.core { stroke: var(--shine-line); }
+.wires .flow.glow { stroke: #8833ff; }
+.wires .flows--core { filter: url(#wire-grain-ring) drop-shadow(0 0 3px var(--shine-glow)) blur(0.35px); }   /* the card's line filter, and a hair of blur so the ends are not sharp */
+.wires .flows--glow { filter: url(#wire-grain-glow); }
+@keyframes wire-flow { from { stroke-dashoffset: var(--o0); } to { stroke-dashoffset: var(--o1); } }
+@media (prefers-reduced-motion: reduce) { .wires .flow.is-run { display: none; } }
+/* Lanes: the Captain on top, one column per task below it, joined by a bus with rounded corners.
+   Each column has a head card and a rail with the rest of the task's agents. */
+.tree .lanes { display: flex; gap: var(--lane-gap); align-items: flex-start; justify-content: center; padding-top: var(--bus); position: relative; }
+.lanes > .lane { width: var(--lane-w); }
+.lanes > .lane > .shell { width: 100%; }
+.lane > .stack { position: relative; }
+
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } .fold svg { transition: none; } }
+
+/* Surface: chip, hover state. Fill, half glow, shine at the cursor, grain. In 200ms, out 380ms. */
+.card { --mx: 50%; --my: 50%; isolation: isolate; }
+.card > * { position: relative; z-index: 1; }
+.card::before, .card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; z-index: 0; opacity: 0; transition: opacity .38s cubic-bezier(.4,0,.2,1); }
+.card::before {
+  background: color-mix(in srgb, var(--hover-fill) 20%, transparent);
+  box-shadow: inset 0 2px 12px 4px color-mix(in srgb, var(--glow-a) 26%, transparent), inset 0 0 32px 12px color-mix(in srgb, var(--glow-b) 20%, transparent);
+}
+.card::after {
+  box-shadow: inset 0 0 0 1.5px var(--shine-line), inset 0 0 36px 4px var(--shine-glow);
+  -webkit-mask-image: radial-gradient(circle 120px at var(--mx) var(--my), #000 0, transparent 100%);
+          mask-image: radial-gradient(circle 120px at var(--mx) var(--my), #000 0, transparent 100%);
+}
+.card:hover::before, .card:hover::after { opacity: 1; transition-duration: .2s; }
+.card:hover::after { opacity: .85; }
+.card:hover::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23g)' opacity='.2'/></svg>"); }
+/* Surface: chip, click effect. The ripple is the kit's: a ring of light that grows from the point of the click and fades (same gradient, blur and grain).
+   The card clips it, like the kit's chips. The tilt and the wavy edge run in script (see clickFx). */
+.card { overflow: hidden; }
+.ripple { position: absolute; z-index: -1; border-radius: 50%; pointer-events: none; mix-blend-mode: lighten; transform: translate(-50%, -50%) scale(0.05);
+  background: radial-gradient(circle closest-side, rgba(107,43,245,0.22) 0%, rgba(107,43,245,0.08) 45%, rgba(107,43,245,0) 62%,
+    rgba(139,92,255,0.22) 70%, rgba(190,160,255,0.5) 78%, rgba(139,92,255,0.24) 86%, rgba(107,43,245,0) 93%,
+    rgba(139,92,255,0.12) 95%, rgba(107,43,245,0) 100%);
+  filter: blur(5px) url(#grain-ring); }
+/* Running: a shine travels around the edge of the card. The layer inherits the card's radius and corner-shape, so the line
+   follows the squircle corner exactly. A rotating conic mask shows an arc of the border with a bright head and a fading tail. */
+@property --run-a { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+@keyframes run-spin { to { --run-a: 360deg; } }
+.card > .runline { position: absolute; inset: 0; z-index: 0; border-radius: inherit; corner-shape: inherit; pointer-events: none; opacity: 0; transition: opacity .38s var(--ease-soft, ease);
+  /* the arc (150deg) fades in slowly at the tail and fades out at the tip: no hard stop. One mask shows the line and the glow. */
+  --run-fade: conic-gradient(from var(--run-a), transparent 0deg, rgba(0,0,0,.05) 30deg, rgba(0,0,0,.25) 60deg, rgba(0,0,0,.7) 87deg, #000 102deg, rgba(0,0,0,.75) 114deg, rgba(0,0,0,.35) 126deg, rgba(0,0,0,.08) 138deg, transparent 150deg, transparent 360deg);
+  -webkit-mask-image: var(--run-fade); mask-image: var(--run-fade);
+  animation: run-spin 2.6s linear infinite; animation-delay: var(--run-delay, 0s); }
+.card > .runline::before, .card > .runline::after { content: ""; position: absolute; inset: 0; box-sizing: border-box; border-radius: inherit; corner-shape: inherit; }
+/* the line: a border with the grain of the kit's ring */
+.card > .runline::before { border: 1.5px solid var(--shine-line); filter: url(#grain-ring) drop-shadow(0 0 3px var(--shine-glow)); }
+/* the inner glow in orchid: it sits inside the edge and has the grain of the kit's glow */
+.card > .runline::after { box-shadow: inset 0 0 12px 2px rgba(136, 51, 255, .6), inset 0 0 28px 4px rgba(165, 97, 255, .28); filter: url(#grain-run); }
+.n[data-status="running"] > .shell .runline { opacity: 1; transition-duration: .2s; }
+.n:not([data-status="running"]) > .shell .runline { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .card > .runline { animation: none; display: none; } }
+/* Surface: chip, selected state. Full glow and grain stay on while the Root card is expanded. */
+.card.is-selected::before {
+  opacity: 1;
+  background-color: color-mix(in srgb, var(--hover-fill) 20%, transparent);
+  box-shadow: inset 0 2px 12px 4px color-mix(in srgb, var(--glow-a) 52%, transparent), inset 0 0 32px 12px color-mix(in srgb, var(--glow-b) 40%, transparent);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='g'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .5 0'/></filter><rect width='100%' height='100%' filter='url(%23g)' opacity='.2'/></svg>");
+}
+.card.sel-new::before { animation: sel-in .2s cubic-bezier(.4,0,.2,1) both; }
+@keyframes sel-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .card::before, .card::after { transition: none; } .card.sel-new::before { animation: none; } }
+/* Blend lighten is part of the surface; it only reads on the dark ground. */
+:root[data-theme="dark"] .card { mix-blend-mode: lighten; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .card { mix-blend-mode: lighten; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <!-- Grain: the noise of the DCS Agentic Harness page (same turbulence, seeds and blur). The line uses grain-ring; the glow uses grain-run (below). -->
+  <filter id="grain-glow" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0 0 0 0 1" result="g0"/><feGaussianBlur in="g0" stdDeviation="0.45" result="g"/><feComposite in="SourceGraphic" in2="g" operator="arithmetic" k1="0.80" k2="0.28" k3="0" k4="0"/></filter>
+  <!-- The same grain as grain-ring and grain-run, for the lit wires. filterUnits is userSpaceOnUse because a straight wire has a bounding box of zero width. -->
+  <filter id="wire-grain-ring" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="14000" height="14000" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0 0 0 0 1" result="g0"/><feGaussianBlur in="g0" stdDeviation="0.45" result="g"/><feComposite in="SourceGraphic" in2="g" operator="arithmetic" k1="0.80" k2="0.28" k3="0" k4="0"/></filter>
+  <filter id="wire-grain-glow" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="14000" height="14000" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceGraphic" stdDeviation="4" result="soft"/><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1.0" result="w"/><feGaussianBlur in="w" stdDeviation="0.55" result="wb"/><feComposite in="wb" in2="soft" operator="in" result="spark"/><feComposite in="soft" in2="spark" operator="arithmetic" k1="0" k2="1" k3="0.6" k4="0"/></filter>
+  <filter id="grain-ring" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="11" result="n"/><feColorMatrix in="n" type="matrix" values="0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0.6 0.6 0.6 0 0  0 0 0 0 1" result="g0"/><feGaussianBlur in="g0" stdDeviation="0.45" result="g"/><feComposite in="SourceGraphic" in2="g" operator="arithmetic" k1="0.80" k2="0.28" k3="0" k4="0"/></filter>
+  <!-- Running glow: additive grain, kept inside the shape of the glow. White speckles (random alpha) are cut to the glow's own alpha and added on top, so the grain is visible where the glow is bright and absent outside it. -->
+  <filter id="grain-run" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.95" numOctaves="2" seed="7" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  3 0 0 0 -1.0" result="w"/><feGaussianBlur in="w" stdDeviation="0.55" result="wb"/><feComposite in="wb" in2="SourceAlpha" operator="in" result="spark"/><feComposite in="SourceGraphic" in2="spark" operator="arithmetic" k1="0" k2="1" k3="0.6" k4="0"/></filter>
+</defs></svg>
+<main class="at">
+  <header class="at__bar">
+    <span class="at__title">
+      <svg class="at__spark" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.2c.4 2.9 1.9 4.4 4.8 4.8-2.9.4-4.4 1.9-4.8 4.8C6.6 7.9 5.1 6.4 2.2 6 5.1 5.6 6.6 4.1 7 1.2Z" fill="currentColor"/></svg>
+      Agents
+    </span>
+    <span class="at__mode" id="mode" role="status"></span>
+    <span class="at__sum" id="sum" aria-live="polite">
+      <span class="num" id="sumAgents"></span>
+      <span class="is-run num" id="sumRun"></span>
+      <span class="is-ask num" id="sumAsk" hidden></span>
+      <button class="failchip is-fail num" id="failChip" type="button" aria-expanded="false" aria-controls="failPop" hidden><span id="failCount"></span> failed <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <span class="at__total num" id="sumTotal"></span>
+    </span>
+    <div class="failpop" id="failPop" role="region" aria-label="Failed agents" hidden></div>
+    <div class="at__tools">
+      <button class="btn" id="replay" type="button">Replay</button>
+      <button class="btn" id="speed" type="button" aria-label="Playback speed">1×</button>
+      <button class="btn" id="foldAll" type="button">Fold all</button>
+      <button class="btn" id="unfoldAll" type="button">Unfold all</button>
+      <button class="btn" id="resetLayout" type="button">Reset layout</button>
+      <button class="btn" id="resetView" type="button">Reset view</button>
+      <button class="btn" id="theme" type="button">Theme</button>
+      <span class="at__zoom" id="zoomLabel" aria-live="off">100%</span>
+    </div>
+  </header>
+  <div class="canvas" id="canvas">
+    <div class="world" id="world"><svg class="wires" id="wires" aria-hidden="true"></svg><ul class="tree" id="tree" role="tree" aria-label="Agents started by the Captain"></ul><svg class="wires wires--dots" id="dots" aria-hidden="true"></svg></div>
+  </div>
+</main>
+
+<script>
+/* Data model: a flat list of agents. parentId says who started whom. */
+const STATUS_LABEL = { running: "Running", done: "Done", failed: "Failed", needs_input: "Needs input" };
+const RATE = { captain: 0.02, worker: 0.012, reviewer: 0.004 };   // dollars per second while running
+const CHEVRON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 9 12 15 6 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const SPIN = '<svg class="spin" width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-opacity=".25" stroke-width="2.5"/><path d="M12 3.5A8.5 8.5 0 0 1 20.5 12" stroke="currentColor" stroke-linecap="round" stroke-width="2.5"/></svg>';
+const ICON = {
+  done: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 13 4 4 10-11" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  failed: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 8v5m0 3.5v.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M10 4.5 3 18a2 2 0 0 0 1.8 3h14.4a2 2 0 0 0 1.8-3L14 4.5a2 2 0 0 0-4 0Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  needs_input: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7m0 3v.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>',
+  running: SPIN,
+};
+
+let agents = [], now = 0, speed = 1, folded = new Set(), fresh = new Set(), script = [];
+let selected = null, justSelected = false;   // Root card is selected after the user expands it
+const $ = (s) => document.querySelector(s);
+/* The Captain starts every agent (parentId). The tree groups them by task for display: the first agent of a task heads a lane,
+   and the other agents of that task hang on its rail. Branch cost and time roll up over this visual tree. */
+const byParent = () => {
+  const m = new Map(), root = agents.find(a => !a.parentId), head = new Map();
+  agents.forEach(a => { if (root && a.parentId === root.id && a.taskId && !head.has(a.taskId)) head.set(a.taskId, a); });
+  agents.forEach(a => {
+    let p = a.parentId;
+    if (root && p === root.id && a.taskId && head.get(a.taskId) !== a) p = head.get(a.taskId).id;
+    (m.get(p) || m.set(p, []).get(p)).push(a);
+  });
+  return m;
+};
+const money = (n) => "$" + n.toFixed(2);
+const clock = (s) => {
+  s = Math.floor(s);
+  if (s >= 3600) return Math.floor(s / 3600) + "h " + String(Math.floor(s % 3600 / 60)).padStart(2, "0") + "m";   // a live session can run for hours
+  return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
+};
+const began = (a) => a.start ?? now;
+const elapsed = (a) => Math.max(0, (a.end ?? now) - began(a));
+/* A live agent carries its real cost (null: no price for its model). The demo has none and uses the estimate. */
+const own = (a) => typeof a.cost === "number" ? a.cost : a.cost === null ? 0 : elapsed(a) * RATE[a.role];
+/* "~" marks a cost that is still counting. "—" marks a model without a price. */
+const costText = (a, has, r) => {
+  if (!has && a.cost === null) return "—";
+  return ((has ? r.est : a.costFinal === false) ? "~" : "") + money(has ? r.cost : own(a));
+};
+
+/* Roll cost up one branch: the agent plus all of its descendants. Time = longest end among the branch. */
+function rollup(a, kids) {
+  let cost = own(a), end = a.end ?? now, count = 0, tally = {}, est = a.costFinal === false;
+  (kids.get(a.id) || []).forEach(k => {
+    const r = rollup(k, kids);
+    cost += r.cost; end = Math.max(end, r.end); count += 1 + r.count; est = est || r.est;
+    for (const s in r.tally) tally[s] = (tally[s] || 0) + r.tally[s];
+    tally[k.status] = (tally[k.status] || 0) + 1;
+  });
+  return { cost, end, count, tally, est };
+}
+
+/* Reconcile the tree with the data. An element is created once per agent and then reused,
+   so a structure change never destroys the card under the pointer (hover, shine and focus stay). */
+const cache = new Map();
+function render() {
+  const kids = byParent();
+  const root = agents.find(a => !a.parentId);
+  const tree = $("#tree");
+  if (!root) { cache.clear(); tree.textContent = ""; resetWires(); return; }
+  const li = node(root, kids, 0);
+  if (tree.firstChild !== li) { tree.textContent = ""; tree.appendChild(li); }
+  fresh.clear();
+  tick();
+  if (!userMoved) fitView();
+  enterCards(tree);
+  drawWires();
+}
+/* Fold and unfold change the width of the tree. Run the change, then pan the view so the Captain card stays on the same screen spot. */
+function holdRoot(change) {
+  const root = agents.find(a => !a.parentId);
+  const find = () => root && document.querySelector('[data-id="' + root.id + '"] > .shell > .card');
+  const a = find(), before = a && a.getBoundingClientRect();
+  change();
+  const b = find();
+  if (!before || !b) return;
+  const after = b.getBoundingClientRect();
+  if (before.left === after.left && before.top === after.top) return;
+  view.x += before.left - after.left; view.y += before.top - after.top;
+  applyView();
+}
+
+/* ---------- Canvas: pan, zoom, grid, snap and group drag ---------- */
+const GRID = 24;   // dot spacing and snap step, in world px
+/* Draggable Sticker (OriginKit): Tilt 6, Strength 4, Elevation 2.
+   tilt = largest tilt in degrees. elevation = lift level out of 10 (2 grows the card by 6%).
+   strength = how strong the ripple is (4 is the kit's ripple, peak 0.7; the component's lighting is replaced by the ripple).
+   The rest are the component's own values: tilt sensitivity 3, smoothing 0.05, lift speed 1.92 a second, settle 0.9, perspective 800px. */
+const STK = { tilt: 6, strength: 4, elevation: 2, sens: 3, smoothing: 0.05, liftSpeed: 1.92, settle: 0.9, persp: 800 };
+const ELEV = STK.elevation / 10 * 0.3;
+const canvas = $("#canvas"), world = $("#world");
+const view = { x: 0, y: 0, z: 1 };
+let userMoved = false;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const smooth = (t) => t * t * (3 - 2 * t);
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOutBack = (t) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+const reduceMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function applyView() {
+  world.style.transform = "translate(" + view.x + "px," + view.y + "px) scale(" + view.z + ")";
+  const g = GRID * view.z;   // the dot sits in the middle of its tile, so shift by half a tile
+  canvas.style.backgroundSize = g + "px " + g + "px";
+  canvas.style.backgroundPosition = (view.x - g / 2) + "px " + (view.y - g / 2) + "px";
+  canvas.style.backgroundImage = g < 9 ? "none" : "";
+  $("#zoomLabel").textContent = Math.round(view.z * 100) + "%";
+}
+function fitView() {
+  view.z = 1;
+  view.x = Math.round((canvas.clientWidth - $("#tree").offsetWidth) / 2 / GRID) * GRID;   // on the grid, so the cards line up with the dots
+  view.y = GRID * 2;
+  applyView();
+}
+const offs = new WeakMap();   // the move of each card group, in world px
+const getOff = (li) => offs.get(li) || { x: 0, y: 0 };
+function setOff(li, o) { offs.set(li, o); li.style.transform = (o.x || o.y) ? "translate(" + o.x + "px," + o.y + "px)" : ""; }
+function layoutPos(el) { let x = 0, y = 0; while (el && el !== world) { x += el.offsetLeft; y += el.offsetTop; el = el.offsetParent; } return { x, y }; }
+function chainOffset(li, includeSelf) {   // the moves of the groups that carry this card
+  let x = 0, y = 0, n = includeSelf ? li : li.parentElement.closest("li.n");
+  for (; n; n = n.parentElement.closest("li.n")) { const o = getOff(n); x += o.x; y += o.y; }
+  return { x, y };
+}
+
+let drag = null, pan = null, rafId = 0, lastTs = 0;
+function paint(g) {
+  const e = smooth(g.lift), still = reduceMotion();
+  for (const sh of g.shells) {
+    sh.style.transform = still ? "" : "perspective(" + STK.persp + "px) rotateX(" + g.tx.toFixed(3) + "deg) rotateY(" + g.ty.toFixed(3) + "deg) scale(" + (1 + ELEV * e).toFixed(4) + ")";
+    sh.style.filter = still ? "" : "drop-shadow(0 " + lerp(1, 13, e).toFixed(2) + "px " + lerp(2, 14, e).toFixed(2) + "px var(--drop))";
+  }
+}
+/* The ripple, the edge wave and the wobble of the click effect play where the pointer is, when a card is picked up and when it is let go. */
+function rippleAt(g, x, y) {
+  const card = g.li.querySelector(":scope > .shell > .card");
+  if (!card) return;
+  const r = card.getBoundingClientRect();   // the card may be lifted and tilted: scale the pointer position back to the card's own size
+  clickFx(card, (x - r.left) * card.offsetWidth / r.width, (y - r.top) * card.offsetHeight / r.height, STK.strength / 4);
+}
+function frame(ts) {
+  const g = drag;
+  if (!g || g.mode !== "active") { rafId = 0; return; }
+  const dt = Math.min((ts - (lastTs || ts)) / 1000, 0.1); lastTs = ts;
+  g.lift = g.held ? Math.min(1, g.lift + STK.liftSpeed * dt) : Math.max(0, g.lift - STK.liftSpeed * dt);
+  const decay = Math.pow(STK.settle, dt * 60);   // 0.9 a frame at 60fps
+  if (!g.held) {
+    g.tx *= decay; g.ty *= decay;
+    if (Math.abs(g.tx) < 0.1 && Math.abs(g.ty) < 0.1) { g.tx = 0; g.ty = 0; }
+    const t = Math.min(1, (ts - g.t0) / 280), k = easeOutBack(t);   // land on the grid with a small overshoot
+    setOff(g.li, { x: lerp(g.from.x, g.snap.x, k), y: lerp(g.from.y, g.snap.y, k) });
+    g.landed = t >= 1;
+  } else if (performance.now() - g.moveT > 60) {   // the pointer rests: the tilt eases back
+    g.tx *= 1 - 0.12 * dt * 60 / 6; g.ty *= 1 - 0.12 * dt * 60 / 6;
+  }
+  paint(g); drawWires();
+  if (!g.held && g.landed && g.lift === 0 && g.tx === 0 && g.ty === 0) { finishDrag(g); return; }
+  rafId = requestAnimationFrame(frame);
+}
+function startDrag(g) {
+  const li = g.li, z = view.z;
+  g.mode = "active"; g.held = true; g.lift = 0; g.tx = 0; g.ty = 0; g.landed = false;
+  g.shells = [...li.querySelectorAll(".shell")];
+  g.own0 = { ...getOff(li) };
+  const head = li.querySelector(":scope > .shell"), hr = head.getBoundingClientRect(), cr0 = canvas.getBoundingClientRect();
+  g.baseX = (hr.left - cr0.left - view.x) / z - g.own0.x; g.baseY = (hr.top - cr0.top - view.y) / z - g.own0.y;   // where the card is with no move of its own
+  g.snap = { x: g.own0.x, y: g.own0.y };
+  g.lastX = g.sx; g.lastY = g.sy; g.moveT = performance.now();
+  for (const sh of g.shells) {   // tilt and scale turn about the point that was grabbed
+    const r = sh.getBoundingClientRect();
+    sh.style.transformOrigin = ((g.sx - r.left) / z) + "px " + ((g.sy - r.top) / z) + "px";
+  }
+  li.classList.add("is-dragging");
+  userMoved = true; lastTs = 0;
+  rippleAt(g, g.sx, g.sy);   // picked up
+  if (!rafId) rafId = requestAnimationFrame(frame);
+}
+function finishDrag(g) {
+  for (const sh of g.shells) sh.style.transform = sh.style.filter = sh.style.transformOrigin = "";
+  g.li.classList.remove("is-dragging");
+  setOff(g.li, g.snap);
+  drawWires();
+  if (drag === g) drag = null;
+  rafId = 0;
+}
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0 || e.target.closest("button")) return;
+  const shell = e.target.closest(".shell");
+  if (shell && !drag) { drag = { mode: "pending", li: shell.closest("li.n"), sx: e.clientX, sy: e.clientY }; }
+  else if (!shell) { pan = { sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y }; canvas.classList.add("is-panning"); userMoved = true; }
+});
+window.addEventListener("pointermove", (e) => {
+  if (pan) { view.x = pan.vx + (e.clientX - pan.sx); view.y = pan.vy + (e.clientY - pan.sy); applyView(); return; }
+  const g = drag; if (!g) return;
+  if (g.mode === "pending") { if (Math.hypot(e.clientX - g.sx, e.clientY - g.sy) < 4) return; startDrag(g); }
+  if (g.mode !== "active" || !g.held) return;
+  const z = view.z, off = { x: g.own0.x + (e.clientX - g.sx) / z, y: g.own0.y + (e.clientY - g.sy) / z };
+  setOff(g.li, off);
+  // the tilt follows the speed of the pointer, as in the Draggable Sticker
+  const now = performance.now(), dt = Math.max(1, now - g.moveT);
+  const vx = ((e.clientX - g.lastX) / dt) * 16, vy = ((e.clientY - g.lastY) / dt) * 16;
+  g.lastX = e.clientX; g.lastY = e.clientY; g.moveT = now;
+  g.ty += (clamp(vx * STK.sens, -STK.tilt, STK.tilt) - g.ty) * STK.smoothing;
+  g.tx += (clamp(-vy * STK.sens, -STK.tilt, STK.tilt) - g.tx) * STK.smoothing;
+  // the landing spot: the head card snaps to the grid
+  g.snap = { x: Math.round((g.baseX + off.x) / GRID) * GRID - g.baseX, y: Math.round((g.baseY + off.y) / GRID) * GRID - g.baseY };
+});
+function endPointer(e) {
+  if (pan) { pan = null; canvas.classList.remove("is-panning"); }
+  const g = drag; if (!g) return;
+  if (g.mode === "pending") { drag = null; return; }
+  if (g.mode === "active" && g.held) { rippleAt(g, e.clientX, e.clientY); g.held = false; g.from = { ...getOff(g.li) }; g.t0 = performance.now(); lastTs = 0; if (!rafId) rafId = requestAnimationFrame(frame); }
+}
+window.addEventListener("pointerup", endPointer);
+window.addEventListener("pointercancel", endPointer);
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault(); userMoved = true;
+  if (e.ctrlKey || e.metaKey) {   // pinch or Ctrl / ⌘ + scroll: zoom about the pointer
+    const r = canvas.getBoundingClientRect(), px = e.clientX - r.left, py = e.clientY - r.top;
+    const nz = clamp(view.z * Math.exp(-clamp(e.deltaY, -40, 40) * 0.01), 0.3, 2);
+    view.x = px - (px - view.x) * (nz / view.z); view.y = py - (py - view.y) * (nz / view.z); view.z = nz;
+  } else { view.x -= e.deltaX; view.y -= e.deltaY; }
+  applyView();
+}, { passive: false });
+window.addEventListener("resize", () => { if (!userMoved) fitView(); });
+
+/* The box of a card at the end of its entrance: the animation is moved to its end, the box is measured, and the animation is put back.
+   Nothing is painted in between, so the card does not move. A card without an entrance animation is measured as it is. */
+function settledRect(sh) {
+  const enter = sh.getAnimations().filter(a => a.id === "enter");
+  const saved = enter.map(a => a.currentTime);
+  enter.forEach(a => { a.currentTime = a.effect.getComputedTiming().endTime; });
+  const r = sh.getBoundingClientRect();
+  enter.forEach((a, i) => { a.currentTime = saved[i]; });
+  return r;
+}
+/* A new child card comes out from behind its parent. It starts hidden behind the parent card (its centre on the parent's centre), at scale 0 and
+   opacity 0, and moves into its place while it grows to full size and fades in. The opacity is full at 70% of the motion, so the card is whole
+   before it stops. The Captain has no parent: it only grows a little. While it moves the card is under the other cards (see .is-fresh). */
+const ENTER_MS = 650;
+function enterCards(tree) {
+  tree.querySelectorAll("li.n.is-fresh").forEach(li => {
+    if (li.dataset.entered) return;
+    li.dataset.entered = "1";
+    if (reduceMotion()) return;
+    const sh = li.querySelector(":scope > .shell"), parentLi = li.parentElement && li.parentElement.closest("li.n");
+    let from = "translate(0px, 0px) scale(.94)";
+    if (parentLi) {
+      const c = settledRect(sh), p = settledRect(parentLi.querySelector(":scope > .shell"));
+      const dx = (p.left + p.width / 2 - (c.left + c.width / 2)) / view.z, dy = (p.top + p.height / 2 - (c.top + c.height / 2)) / view.z;   // in the card's own px
+      from = "translate(" + dx.toFixed(1) + "px, " + dy.toFixed(1) + "px) scale(0)";
+    }
+    sh.animate([{ opacity: 0, transform: from }, { opacity: 1, offset: 0.7 }, { opacity: 1, transform: "translate(0px, 0px) scale(1)" }],
+      { duration: ENTER_MS, easing: "cubic-bezier(.22, .9, .3, 1)", id: "enter" });
+  });
+}
+
+/* Wires: one bezier curve from a parent to each of its children, measured from the layout. The box of a card is its rendered box: it includes
+   a move, a tilt and a lift, so a wire follows a card that is dragged. It leaves out the entrance of a new card (see settledRect). */
+function drawWires() {
+  const svg = $("#wires"), tree = $("#tree");
+  const wires = [];   // { d, to }: one wire per agent, "to" is the agent the wire leads into
+  let dots = "";
+  const cr = canvas.getBoundingClientRect(), z = view.z;
+  const box = (li) => {   // the rendered box in world px: it includes the move, the tilt and the lift, but not the entrance of a new card
+    const sh = li.querySelector(":scope > .shell"), r = settledRect(sh);   // the wire meets the card where it will stay, not where it is on its way
+    return { x: (r.left - cr.left - view.x) / z, y: (r.top - cr.top - view.y) / z, w: r.width / z, h: r.height / z, s: (r.height / z) / sh.offsetHeight };
+  };
+  const root = tree.querySelector(":scope > .n--root");
+  if (!root) { resetWires(); return; }
+  // While a group is dragged, a ring dot of another group is hidden when the dragged cards cover it.
+  const cover = (drag && drag.mode === "active") ? drag.shells.map(sh => { const r = sh.getBoundingClientRect(); return { l: (r.left - cr.left - view.x) / z, t: (r.top - cr.top - view.y) / z, r: (r.right - cr.left - view.x) / z, b: (r.bottom - cr.top - view.y) / z }; }) : [];
+  const dot = (cx, cy, owner) => {
+    if (cover.length && !drag.li.contains(owner) && cover.some(c => cx > c.l - 2 && cx < c.r + 2 && cy > c.t - 2 && cy < c.b + 2)) return "";
+    return '<circle cx="' + cx + '" cy="' + cy + '" r="5"/>';
+  };
+  const rb = box(root);
+  const lanes = root.querySelector(":scope > .lanes");
+  if (lanes) {
+    const sx = rb.x + rb.w / 2, sy = rb.y + rb.h;
+    dots += dot(sx, sy, root);
+    lanes.querySelectorAll(":scope > .lane").forEach(lane => {
+      const b = box(lane), ex = b.x + b.w / 2, ey = b.y, k = (ey - sy) * 0.6;
+      wires.push({ to: lane.dataset.id, len: Math.hypot(ex - sx, ey - sy) * 1.1, d: "M" + sx + " " + sy + " C" + sx + " " + (sy + k) + " " + ex + " " + (ey - k) + " " + ex + " " + ey });
+      const stack = lane.querySelector(":scope > .stack");
+      if (!stack) return;
+      const dx = b.x + 20 * b.s, dy = b.y + b.h;   // the rail starts 20px in from the left edge of the head card
+      dots += dot(dx, dy, lane);
+      stack.querySelectorAll(":scope > .n").forEach(m => {
+        const mb = box(m), mx = mb.x, my = mb.y + 48 * mb.s;   // 48 = the centre of the card header (4 + 24 + 20)
+        wires.push({ to: m.dataset.id, len: Math.abs(my - dy) + Math.abs(mx - dx), d: "M" + dx + " " + dy + " Q" + dx + " " + my + " " + mx + " " + my });
+      });
+    });
+  }
+  paintWires(svg, wires, layerCounts(wires.length));
+  if (dots !== lastDots) { $("#dots").innerHTML = dots; lastDots = dots; }   // the ring dots are a few circles: only replace them when one changed
+  markWires();
+}
+/* The wires are updated in place. A redraw (a drag, a resize, a new card) only changes the "d" of a wire that moved, adds the wires of new cards
+   and removes the wires of cards that left. The elements stay, so the comets keep running and nothing flickers. Rebuilding every wire on every
+   redraw made the lit wires flicker when a card appeared. A full rebuild happens only when the number of comet layers changes. */
+const wireNodes = new Map();   // agent id -> { d, base, glow: [elements], core: [elements] }
+let wireCounts = null, lastDots = "";
+function resetWires() { wireNodes.clear(); wireCounts = null; lastDots = ""; $("#wires").innerHTML = ""; $("#dots").innerHTML = ""; }
+const svgNodes = (html) => { const t = document.createElementNS("http://www.w3.org/2000/svg", "svg"); t.innerHTML = html; return [...t.children]; };
+function paintWires(svg, wires, counts) {
+  if (!wireCounts || wireCounts.core !== counts.core || wireCounts.glow !== counts.glow || !svg.querySelector(".flows--core")) {
+    svg.innerHTML = '<g class="flows flows--glow"></g><g class="flows flows--core"></g>';
+    wireNodes.clear(); wireCounts = counts;
+  }
+  const glowG = svg.querySelector(".flows--glow"), coreG = svg.querySelector(".flows--core");
+  const live = new Set(wires.map(w => w.to));
+  for (const [to, n] of wireNodes) if (!live.has(to)) { n.base.remove(); n.glow.forEach(e => e.remove()); n.core.forEach(e => e.remove()); wireNodes.delete(to); }
+  for (const w of wires) {
+    let n = wireNodes.get(w.to);
+    if (!n) {
+      const [base] = svgNodes('<path d="' + w.d + '" data-to="' + w.to + '"/>');
+      const glow = svgNodes(flowLayers(w, "glow", stack(counts.glow, 0.7), 9)), core = svgNodes(flowLayers(w, "core", stack(counts.core, 0.88), 2));
+      base.classList.add("wire-new");
+      svg.insertBefore(base, glowG);   // the plain wire runs under the comets
+      glow.forEach(e => glowG.appendChild(e)); core.forEach(e => coreG.appendChild(e));
+      wireNodes.set(w.to, n = { d: w.d, base, glow, core });
+    } else if (n.d !== w.d) {
+      n.d = w.d; n.base.setAttribute("d", w.d);
+      n.glow.forEach(e => e.setAttribute("d", w.d)); n.core.forEach(e => e.setAttribute("d", w.d));
+    }
+  }
+}
+/* The comet of a lit wire. pathLength is 100, so a length is a share of the wire.
+   It follows the glow of a running card: the card's arc peaks 68% of the way from tail to tip, fades in slowly at the tail (an ease-in)
+   and out faster at the tip, with no hard end. The comet is a stack of dashes of different lengths, all centred on the same point.
+   Where layers overlap, their opacities add up. The lengths follow 1 - sqrt(j/n), so the coverage falls off as a parabola and meets zero with zero slope.
+   The longest layers carry the least opacity (30% of the share of the shortest), so the first step at each end is too small to see.
+   The opacity is scaled so that the point where every layer overlaps reaches `peak`. */
+const COMET = 42, PEAK = 0.68;           // longest layer, as a share of the wire; where the peak sits between tail and tip
+const WIRE_SPEED = 120;                  // pixels a second along the wire. Lower is slower. A card's own shine takes 2.6 s a lap.
+const stackCache = new Map();
+function stack(n, peak) {
+  const key = n + ":" + peak;
+  if (!stackCache.has(key)) {
+    const weight = (j) => 0.3 + 0.7 * (n === 1 ? 1 : j / (n - 1));
+    const reach = (k) => 1 - Array.from({ length: n }, (_, j) => 1 - k * weight(j)).reduce((p, x) => p * x, 1);
+    let lo = 0, hi = 1;                  // find the scale k with reach(k) = peak
+    for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; reach(mid) < peak ? (lo = mid) : (hi = mid); }
+    stackCache.set(key, Array.from({ length: n }, (_, j) => [COMET * (1 - Math.sqrt(j / n)), +(lo * weight(j)).toFixed(4)]));
+  }
+  return stackCache.get(key);
+}
+// Many fine layers make the smoothest ends. A budget of about 600 layers keeps a tree with many lit wires fluid.
+const layerCounts = (wires) => { const per = Math.floor(600 / Math.max(1, wires)); return { core: Math.min(28, Math.max(10, Math.floor(per * 0.7))), glow: Math.min(10, Math.max(4, Math.floor(per * 0.25))) }; };
+function flowLayers(w, cls, layers, width) {
+  const dur = Math.min(4.4, Math.max(1.6, w.len / WIRE_SPEED));
+  const delay = -((performance.now() / 1000) % dur);       // one clock for all wires, so a redraw (a drag, a resize) does not restart the comet
+  const tipReach = (1 - PEAK) * COMET, tailReach = PEAK * COMET;   // the comet starts fully before the wire and ends fully after it
+  return layers.map(([len, a]) => '<path class="flow ' + cls + '" pathLength="100" d="' + w.d + '" data-to="' + w.to + '" stroke-dasharray="' + len.toFixed(2) + ' 300"' +
+    ' style="--o0:' + (PEAK * len + tipReach).toFixed(2) + ';--o1:' + (PEAK * len - (100 + tailReach)).toFixed(2) + ';animation-duration:' + dur.toFixed(2) + 's;animation-delay:' + delay.toFixed(3) + 's;stroke-opacity:' + a + ';stroke-width:' + width + '"/>').join("");
+}
+/* The wire into an agent is lit while that agent, or any agent under it, is running. Runs on every tick, so a status change shows at once. */
+function markWires() {
+  const kids = byParent(), seen = new Map();
+  const running = (a) => { if (!seen.has(a.id)) seen.set(a.id, a.status === "running" || (kids.get(a.id) || []).some(running)); return seen.get(a.id); };
+  const on = new Set(agents.filter(running).map(a => a.id));
+  $("#wires").querySelectorAll("[data-to]").forEach(p => p.classList.toggle("is-run", on.has(p.dataset.to)));
+}
+new ResizeObserver(() => drawWires()).observe($("#tree"));
+window.addEventListener("resize", drawWires);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawWires);
+
+function create(a) {
+  const li = document.createElement("li");
+  li.className = "n";
+  li.setAttribute("role", "treeitem");
+  li.dataset.id = a.id;
+  let h = 0; for (const ch of a.id) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  li.style.setProperty("--run-delay", "-" + (h % 24) / 10 + "s");   // 0 to 2.3s, so the cards do not shine in step
+  // Shell: holds the card and, under it, the meta row. The card is inset 4px.
+  const shell = document.createElement("div");
+  shell.className = "shell";
+  shell.innerHTML =
+    '<div class="card">' +
+      '<div class="top"><span class="ava" data-role="' + a.role + '">' + a.name[0] + '</span>' +
+      '<span class="who"><span class="name"></span><span class="model"></span></span>' +
+      '<span class="pill" data-pill></span></div>' +
+      '<p class="task"></p>' +
+      '<span class="runline" aria-hidden="true"></span>' +
+    '</div>' +
+    '<div class="meta"><span class="num"><span class="cost" data-cost></span><span class="time" data-time></span></span></div>';
+  shell.querySelector(".name").textContent = a.name;
+  shell.querySelector(".model").textContent = a.model;
+  const task = shell.querySelector(".task");
+  if (a.taskId) { const b = document.createElement("b"); b.textContent = a.taskId; task.append(b); }
+  task.append(a.task);
+  li.appendChild(shell);
+  return li;
+}
+
+function node(a, kids, depth) {
+  const children = kids.get(a.id) || [];
+  const isFolded = folded.has(a.id);
+  let li = cache.get(a.id);
+  const isNew = !li;
+  if (isNew) { li = create(a); cache.set(a.id, li); }
+  li.classList.toggle("n--root", depth === 0);
+  li.classList.toggle("lane", depth === 1);
+  if (isNew && fresh.has(a.id)) { li.classList.add("is-fresh"); setTimeout(() => li.classList.remove("is-fresh"), ENTER_MS + 100); }
+  li.dataset.status = a.status;
+  if (children.length) li.setAttribute("aria-expanded", String(!isFolded)); else li.removeAttribute("aria-expanded");
+  li.setAttribute("aria-label", a.name + ": " + STATUS_LABEL[a.status]);
+
+  const shell = li.querySelector(":scope > .shell");
+  const card = shell.querySelector(".card");
+  const sig = a.name + "|" + a.model + "|" + a.taskId + "|" + a.task;   // live data can change these after the card exists
+  if (card.dataset.sig !== sig) {
+    card.dataset.sig = sig;
+    shell.querySelector(".name").textContent = a.name;
+    shell.querySelector(".model").textContent = a.model;
+    const t = card.querySelector(".task");
+    t.textContent = "";
+    if (a.taskId) { const b = document.createElement("b"); b.textContent = a.taskId; t.append(b); }
+    t.append(a.task);
+  }
+  card.querySelector(".task").title = a.note || "";
+  shell.querySelector(".meta > .num").title = children.length ? "This branch, with its sub-agents" : "This agent";
+  const sel = depth === 0 && selected === a.id;
+  card.classList.toggle("is-selected", sel);
+  if (sel && justSelected) { card.classList.add("sel-new"); setTimeout(() => card.classList.remove("sel-new"), 300); }
+
+  // Fold button: present only while the agent has sub-agents.
+  let btn = shell.querySelector(".fold");
+  if (children.length && !btn) {
+    btn = document.createElement("button");
+    btn.type = "button"; btn.className = "fold";
+    btn.addEventListener("click", (e) => toggle(a.id, e));
+    shell.querySelector(".meta").appendChild(btn);
+  } else if (!children.length && btn) { btn.remove(); btn = null; }
+  if (btn) {
+    btn.setAttribute("aria-expanded", String(!isFolded));
+    btn.setAttribute("aria-label", (isFolded ? "Show " : "Fold ") + children.length + " sub-agents of " + a.name);
+    if (btn.dataset.n !== String(children.length)) { btn.dataset.n = children.length; btn.innerHTML = '<span class="num">' + children.length + "</span>" + CHEVRON; }
+  }
+
+  // Below the card: the one-line summary (folded) or the list of children (open).
+  let one = li.querySelector(":scope > .one"), ul = li.querySelector(":scope > ul");
+  if (children.length && isFolded) {
+    if (ul) ul.remove();
+    if (!one) {
+      one = document.createElement("button");
+      one.type = "button"; one.className = "one"; one.dataset.one = a.id;
+      one.setAttribute("aria-label", "Show sub-agents of " + a.name);
+      one.addEventListener("click", (e) => toggle(a.id, e));
+      li.appendChild(one);
+    }
+  } else if (children.length) {
+    if (one) one.remove();
+    if (!ul) { ul = document.createElement("ul"); ul.setAttribute("role", "group"); ul.className = depth === 0 ? "lanes" : "stack"; li.appendChild(ul); }
+    children.forEach((k, i) => {
+      const el = node(k, kids, depth + 1);
+      if (ul.children[i] !== el) ul.insertBefore(el, ul.children[i] || null);
+    });
+    while (ul.children.length > children.length) ul.lastElementChild.remove();   // an agent that left the data
+  } else {
+    if (one) one.remove();
+    if (ul) ul.remove();
+  }
+  return li;
+}
+
+/* Update numbers and the one-line summaries of folded branches. */
+function tick() {
+  const kids = byParent();
+  agents.forEach(a => {
+    const li = document.querySelector('[data-id="' + a.id + '"]');
+    if (!li) return;
+    const r = rollup(a, kids);
+    const has = (kids.get(a.id) || []).length > 0;
+    li.dataset.status = a.status;
+    li.setAttribute("aria-label", a.name + ": " + STATUS_LABEL[a.status]);
+    const shell = li.querySelector(":scope > .shell");
+    const pill = shell.querySelector("[data-pill]");
+    pill.dataset.status = a.status;
+    const label = ICON[a.status] + STATUS_LABEL[a.status];
+    if (pill.dataset.label !== label) { pill.innerHTML = label; pill.dataset.label = label; }
+    shell.querySelector("[data-cost]").textContent = costText(a, has, r);
+    shell.querySelector("[data-time]").textContent = " · " + clock(has ? r.end - began(a) : elapsed(a));
+    const one = li.querySelector(":scope > .one");
+    if (one) {
+      const parts = Object.entries(r.tally).map(([s, n]) => '<span class="dot" data-s="' + s + '"></span>' + n + " " + STATUS_LABEL[s].toLowerCase());
+      one.innerHTML = '<span class="num"><b>' + r.count + "</b> sub-agents</span> · " + parts.join(" · ") + ' · <span class="num">' + (r.est ? "~" : "") + money(r.cost - own(a)) + "</span>";
+    }
+  });
+  markWires();
+  // Summary bar
+  const run = agents.filter(a => a.status === "running").length;
+  const ask = agents.filter(a => a.status === "needs_input").length;
+  const failed = agents.filter(a => a.status === "failed" && !dismissed.has(a.id)), fail = failed.length;
+  const total = agents.reduce((s, a) => s + own(a), 0);
+  /* The elements stay in place and only their text changes. A click is a press and a release, and a button that is replaced between them gets no click. */
+  const put = (id, text) => { const e = $(id); if (e.textContent !== text) e.textContent = text; };
+  put("#sumAgents", agents.length + " agents");
+  put("#sumRun", run + " running");
+  $("#sumAsk").hidden = !ask; put("#sumAsk", ask + " needs input");
+  $("#failChip").hidden = !fail; put("#failCount", String(fail));
+  put("#sumTotal", (agents.some(a => a.costFinal === false) ? "~" : "") + money(total));
+  if (!fail) failOpen = false;
+  $("#failChip").setAttribute("aria-expanded", String(failOpen));
+  paintFailPop(failed);
+}
+
+/* The failed list: a dropdown on the "failed" count. A row can dismiss the entry, show the card (click the name) or retry the task.
+   Retry asks the server to start a new headless dcs run (POST /retry). It spends money, so the first click arms the button and the second click confirms. */
+let failOpen = false, retryInfo = null; const dismissed = new Set(), retryState = new Map();
+const retryWhy = (a) => mode !== "live" ? "Retry works on a live run only." : !(retryInfo && retryInfo.enabled) ? "Retry is off. Start the server with --dcs <dcs plugin folder>." : !a.taskId ? "This agent has no task id." : "";
+const failRefresh = () => { $("#failPop").dataset.sig = ""; renderFailPop(); };
+function retryClick(id) {
+  const a = agents.find(x => x.id === id), st = retryState.get(id) || {};
+  if (!a || retryWhy(a) || st.phase === "sending" || st.phase === "started") return;
+  if (st.phase !== "armed") {
+    retryState.set(id, { phase: "armed" }); failRefresh();
+    setTimeout(() => { if ((retryState.get(id) || {}).phase === "armed") { retryState.delete(id); failRefresh(); } }, 5000);
+    return;
+  }
+  retryState.set(id, { phase: "sending" }); failRefresh();
+  fetch("/retry", { method: "POST", headers: { "content-type": "application/json", "x-agent-tree": "retry" }, body: JSON.stringify({ task: a.taskId }) })
+    .then(r => r.json().catch(() => ({ ok: false, message: "The server sent no answer." })))
+    .then(r => { retryState.set(id, r.ok ? { phase: "started", msg: r.message } : { phase: "error", msg: r.message }); failRefresh(); })
+    .catch(() => { retryState.set(id, { phase: "error", msg: "The server did not answer." }); failRefresh(); });
+}
+function placeFailPop() {   // the list hangs just under the count, not under the toolbar
+  const chip = $("#failChip"), pop = $("#failPop"), bar = pop.parentElement;
+  if (!chip || pop.hidden) return;
+  pop.style.top = (chip.getBoundingClientRect().bottom - bar.getBoundingClientRect().top + 6) + "px";
+}
+window.addEventListener("resize", placeFailPop);
+function paintFailPop(failed) {
+  const pop = $("#failPop");
+  pop.hidden = !failOpen;
+  if (!failOpen) return;
+  placeFailPop();
+  const sig = failed.map(a => a.id + "|" + a.name + "|" + a.task + "|" + a.note + "|" + a.taskId + "|" + JSON.stringify(retryState.get(a.id) || null) + "|" + retryWhy(a)).join("\n") + mode + (retryInfo && retryInfo.enabled);
+  if (pop.dataset.sig === sig) return;   // the page ticks often; rebuild only when a row changes
+  pop.dataset.sig = sig;
+  pop.textContent = "";
+  for (const a of failed) {
+    const row = document.createElement("div"); row.className = "failrow"; row.dataset.agent = a.id;
+    const icon = document.createElement("span"); icon.className = "failrow__icon"; icon.innerHTML = ICON.failed;
+    const head = document.createElement("button"); head.className = "failrow__head"; head.type = "button"; head.dataset.act = "show"; head.title = "Show this card";
+    const name = document.createElement("span"); name.className = "failrow__name"; name.textContent = a.name;
+    const task = document.createElement("span"); task.className = "failrow__task"; task.textContent = (a.taskId ? a.taskId + " " : "") + a.task;
+    head.append(name, task);
+    const why = document.createElement("div"); why.className = "failrow__why"; why.textContent = why.title = a.note || "No reason was given.";
+    const acts = document.createElement("div"); acts.className = "failrow__acts";
+    const dismiss = document.createElement("button"); dismiss.className = "btn"; dismiss.type = "button"; dismiss.textContent = "Dismiss"; dismiss.dataset.act = "dismiss";
+    const st = retryState.get(a.id) || {}, off = retryWhy(a);
+    const rt = document.createElement("button"); rt.className = "btn btn--primary"; rt.type = "button"; rt.dataset.act = "retry";
+    rt.textContent = st.phase === "armed" ? "Confirm · up to $" + retryInfo.budget : st.phase === "sending" ? "Starting…" : st.phase === "started" ? "Retry started" : "Retry";
+    rt.disabled = !!off || st.phase === "sending" || st.phase === "started";
+    rt.title = off || (st.phase === "armed" ? "Starts a new headless run of /dcs:work " + a.taskId + ". It spends money, up to $" + retryInfo.budget + "." : "Run this task again");
+    acts.append(dismiss, rt);
+    row.append(icon, head, why, acts);
+    if (st.msg) { const msg = document.createElement("div"); msg.className = "failrow__msg" + (st.phase === "error" ? " is-error" : ""); msg.setAttribute("role", "status"); msg.textContent = st.msg; row.insertBefore(msg, acts); }
+    pop.appendChild(row);
+  }
+}
+function showCard(id) {
+  const c = document.querySelector('[data-id="' + id + '"] > .shell');
+  if (!c) return;
+  const r = c.getBoundingClientRect(), v = canvas.getBoundingClientRect();
+  view.x += (v.left + v.width / 2) - (r.left + r.width / 2);
+  view.y += (v.top + v.height / 2) - (r.top + r.height / 2);
+  userMoved = true; applyView(); drawWires();
+}
+function setFailOpen(open) { failOpen = open; $("#failPop").dataset.sig = ""; const chip = $("#failChip"); if (chip) chip.setAttribute("aria-expanded", String(open)); renderFailPop(); }
+const renderFailPop = () => paintFailPop(agents.filter(a => a.status === "failed" && !dismissed.has(a.id)));
+$("#sum").addEventListener("click", (e) => { if (e.target.closest("#failChip")) setFailOpen(!failOpen); });
+$("#failPop").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const id = b.closest(".failrow").dataset.agent;
+  if (b.dataset.act === "show") showCard(id);
+  else if (b.dataset.act === "retry") retryClick(id);
+  else { dismissed.add(id); if (!agents.some(a => a.status === "failed" && !dismissed.has(a.id))) failOpen = false; $("#failPop").dataset.sig = ""; tick(); const chip = $("#failChip"); if (chip) chip.focus(); }
+});
+document.addEventListener("pointerdown", (e) => { if (failOpen && !e.target.closest("#failPop, #failChip")) setFailOpen(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && failOpen) { setFailOpen(false); const chip = $("#failChip"); if (chip) chip.focus(); } });
+
+$("#tree").addEventListener("pointermove", (e) => {
+  const c = e.target.closest(".card");
+  if (!c) return;
+  const r = c.getBoundingClientRect();
+  c.style.setProperty("--mx", ((e.clientX - r.left) / view.z) + "px");
+  c.style.setProperty("--my", ((e.clientY - r.top) / view.z) + "px");
+});
+
+/* Click effect of the DCS Harness UI Kit chip, ported from the DCS Agentic Harness page with the same numbers.
+   On press: a soft ring of light grows from the pointer (2s), the button dips and rises (1s), and its edge bends: a wave travels outward
+   from the pointer and pushes the outline inward (1.2s). The outline is a polygon of the same squircle shape (corner radius 32, exponent 4),
+   so the edge stays smooth. power scales the ripple (Strength 4 gives the kit's strength). */
+function wavyClip(w, h, cx, cy, k) {
+  var R = Math.min(32, w / 2, h / 2), pts = [], N = 14, step = 5;
+  var amp = 5 * Math.pow(1 - k, 1.8) * Math.min(1, k * 7);           /* swells in fast, dies away slowly */
+  var front = 40 + k * Math.hypot(w, h) * 0.85, wl = 62, kk = 2 * Math.PI / wl;
+  function put(px, py, nx, ny) {
+    var dd = Math.hypot(px - cx, py - cy), g = Math.exp(-Math.pow((dd - front) / 55, 2));
+    var d = amp * g;
+    pts.push((px - nx * d).toFixed(2) + 'px ' + (py - ny * d).toFixed(2) + 'px');
+  }
+  function edge(x0, y0, x1, y1, nx, ny) {
+    var len = Math.hypot(x1 - x0, y1 - y0), n = Math.max(1, Math.round(len / step));
+    for (var i = 0; i < n; i++) put(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, nx, ny);
+  }
+  function corner(ox, oy, a0) {
+    for (var i = 0; i <= N; i++) {
+      var a = a0 + (Math.PI / 2) * i / N, c = Math.cos(a), s = Math.sin(a);
+      var lx = Math.sign(c) * Math.pow(Math.abs(c), 0.5), ly = Math.sign(s) * Math.pow(Math.abs(s), 0.5);
+      var nx = Math.sign(lx) * Math.pow(Math.abs(lx), 3), ny = Math.sign(ly) * Math.pow(Math.abs(ly), 3), nl = Math.hypot(nx, ny) || 1;
+      put(ox + R * lx, oy + R * ly, nx / nl, ny / nl);
+    }
+  }
+  corner(R, R, Math.PI);                       /* top left */
+  edge(R, 0, w - R, 0, 0, -1);
+  corner(w - R, R, -Math.PI / 2);              /* top right */
+  edge(w, R, w, h - R, 1, 0);
+  corner(w - R, h - R, 0);                     /* bottom right */
+  edge(w - R, h, R, h, 0, 1);
+  corner(R, h - R, Math.PI / 2);               /* bottom left */
+  edge(0, h - R, 0, R, -1, 0);
+  return 'polygon(' + pts.join(',') + ')';
+}
+let chipActive = null, chipRaf = 0;
+function clickFx(el, x, y, power = 1) {   // x, y: the pointer inside the card, in the card's own px
+  if (reduceMotion()) return;
+  const w = el.offsetWidth, h = el.offsetHeight;
+  const d = 2 * Math.hypot(Math.max(x, w - x), Math.max(y, h - y)) + 24;
+  const sp = document.createElement("span");
+  sp.className = "ripple"; sp.setAttribute("aria-hidden", "true");
+  sp.style.left = x + "px"; sp.style.top = y + "px"; sp.style.width = sp.style.height = d + "px";
+  el.appendChild(sp);
+  const peak = 0.7 * power;
+  const ra = sp.animate([
+    { transform: "translate(-50%,-50%) scale(0.04)", opacity: 0 },
+    { transform: "translate(-50%,-50%) scale(0.3)", opacity: peak, offset: 0.12 },
+    { transform: "translate(-50%,-50%) scale(0.78)", opacity: peak * 0.5, offset: 0.55 },
+    { transform: "translate(-50%,-50%) scale(1.05)", opacity: 0 }
+  ], { duration: 2000, delay: 0, easing: "cubic-bezier(0.0, 0.0, 0.2, 1)", fill: "backwards" });
+  ra.onfinish = ra.oncancel = () => sp.remove();
+  /* tilt: the pressed spot dips, the opposite side lifts, then the button settles with a small rise */
+  const nx = (x / w - 0.5) * 2, ny = (y / h - 0.5) * 2, A = 7;
+  const tf = (k, sc) => "perspective(700px) rotateX(" + (-ny * A * k).toFixed(2) + "deg) rotateY(" + (nx * A * k * Math.min(1, 120 / w * 2)).toFixed(2) + "deg) scale(" + sc + ")";
+  el.animate([
+    { transform: tf(0, 1) },
+    { transform: tf(1, 0.985), offset: 0.2 },
+    { transform: tf(-0.35, 1.012), offset: 0.55 },
+    { transform: tf(0.1, 1.003), offset: 0.8 },
+    { transform: tf(0, 1) }
+  ], { duration: 1000, easing: "cubic-bezier(0.22, 0.8, 0.3, 1)" });
+  if (chipActive && chipActive !== el) chipActive.style.clipPath = "";
+  chipActive = el;
+  const t0 = performance.now(); cancelAnimationFrame(chipRaf);
+  (function step(now) {
+    const k = Math.min(1, Math.max(0, (now - t0) / 1200));
+    el.style.clipPath = wavyClip(w, h, x, y, k);
+    if (k < 1) chipRaf = requestAnimationFrame(step); else { el.style.clipPath = ""; chipActive = null; }
+  })(t0);
+}
+
+let pendingFx = null;
+function toggle(id, ev) {
+  folded.has(id) ? folded.delete(id) : folded.add(id);
+  const root = agents.find(a => !a.parentId);
+  if (root && id === root.id) {
+    selected = folded.has(id) ? null : id; justSelected = !!selected;
+    if (selected) {
+      let x = ev ? ev.clientX : 0, y = ev ? ev.clientY : 0;
+      if (ev && !x && !y) { const r = ev.currentTarget.getBoundingClientRect(); x = r.left + r.width / 2; y = r.top + r.height / 2; }   // keyboard click
+      pendingFx = ev ? { x, y } : null;
+    }
+  }
+  holdRoot(render);
+  justSelected = false;
+  if (pendingFx) {
+    const card = document.querySelector('[data-id="' + id + '"] > .shell > .card');
+    const r = card.getBoundingClientRect();
+    clickFx(card, (pendingFx.x - r.left) / view.z, (pendingFx.y - r.top) / view.z);
+    pendingFx = null;
+  }
+  const again = document.querySelector('[data-id="' + id + '"] > .shell .fold');
+  if (again) again.focus();
+}
+
+/* Demo script: sim seconds -> mutation. It runs with ?demo=1, and when the page is opened from a file. */
+const A = (id, parentId, role, name, model, task, extra = {}) => () => {
+  agents.push({ id, parentId, role, name, model, task, status: "running", start: now, end: null, ...extra });
+  fresh.add(id);
+};
+const S = (id, status, note) => () => {
+  const a = agents.find(x => x.id === id);
+  a.status = status;
+  if (note) a.note = note;
+  if (status === "done" || status === "failed") a.end = now;
+  if (status !== "done" && status !== "failed") a.end = null;
+};
+function buildScript() {
+  return [
+    [0, A("cap", null, "captain", "Captain", "Opus 5.5", "Run the plan: checkout redesign")],
+    [1, A("w1", "cap", "worker", "Worker", "Sonnet 5.5", "Spec the pricing screen", { taskId: "t-01" })],
+    [1, A("w2", "cap", "worker", "Worker", "Sonnet 5.5", "Build the plan cards", { taskId: "t-02" })],
+    [1, A("w3", "cap", "worker", "Worker", "Sonnet 5.5", "Wire up checkout", { taskId: "t-03" })],
+    [6, S("w1", "done")],
+    [6, A("r1a", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: ac", { taskId: "t-01" })],
+    [6, A("r1b", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: security", { taskId: "t-01" })],
+    [8, S("w2", "needs_input", "Which plan name wins: Pro or Plus?")],
+    [10, S("r1a", "done")], [11, S("r1b", "done")],
+    [12, S("w2", "running")],
+    [14, S("w3", "failed", "dcs verify failed: checkout test")],
+    [15, A("w3r", "cap", "worker", "Worker", "Sonnet 5.5", "Retry: wire up checkout", { taskId: "t-03" })],
+    [17, S("w2", "done")],
+    [17, A("r2a", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: ac", { taskId: "t-02" })],
+    [17, A("r2b", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: a11y", { taskId: "t-02" })],
+    [17, A("r2c", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: refute", { taskId: "t-02" })],
+    [22, S("r2a", "done")], [23, S("r2b", "done")], [24, S("r2c", "done")],
+    [25, S("w3r", "done")],
+    [25, A("r3a", "cap", "reviewer", "Reviewer", "Haiku 5.5", "Pass: ac", { taskId: "t-03" })],
+    [29, S("r3a", "done")],
+    [30, S("cap", "done")],
+  ];
+}
+
+function reset() {
+  agents = []; now = 0; folded.clear(); fresh.clear(); selected = null; cache.clear(); $("#tree").textContent = ""; script = buildScript(); userMoved = false;
+  render();
+}
+
+/* ---------- Live data: the snapshots of server.mjs (integration-plan.md, section 7) ----------
+   demo: the script above. live: one snapshot per poll from /stream. replay: recorded snapshots from /runs/<id>.
+   Times arrive as Unix ms. The page keeps seconds since the Captain started, as the demo does. */
+const params = new URLSearchParams(location.search);
+let mode = "demo";
+const feed = { run: null, origin: 0, ended: false, endAt: 0, lastTs: 0, connected: false };
+const rp = { snaps: [], i: 0, t: 0 };   // replay: the snapshots, the next one, and the virtual time in ms
+const MODE_LABEL = { demo: "Demo", live: "Live", replay: "Replay", off: "Disconnected", wait: "Waiting for a Claude Code session" };
+function setMode(kind, extra) {
+  const el = $("#mode"), text = MODE_LABEL[kind] + (extra ? " · " + extra : "");
+  el.dataset.mode = kind;
+  if (el.textContent !== text) el.textContent = text;
+}
+function showControls() { $("#speed").hidden = $("#replay").hidden = mode === "live"; }
+function clearRun() { agents = []; folded.clear(); fresh.clear(); selected = null; cache.clear(); $("#tree").textContent = ""; userMoved = false; }
+
+function applySnapshot(s) {
+  feed.lastTs = s.ts;
+  const cap = s.agents.find(a => !a.parentId);
+  if (!cap) { if (!agents.length) { feed.run = null; render(); } return; }   // no session yet: keep what is shown
+  if (s.run !== feed.run) { clearRun(); feed.run = s.run; feed.origin = cap.start; }
+  feed.ended = !s.live;
+  feed.endAt = feed.ended && cap.end != null ? (cap.end - feed.origin) / 1000 : 0;
+  const sec = (ms) => ms == null ? null : (ms - feed.origin) / 1000;
+  const ids = new Set(s.agents.map(a => a.id));
+  const byId = new Map(agents.map(a => [a.id, a]));
+  let structure = false;
+  for (const x of s.agents) {
+    if (x.parentId && !ids.has(x.parentId)) { console.warn("agent " + x.id + " names an unknown parent " + x.parentId); continue; }
+    const next = { parentId: x.parentId, taskId: x.taskId, role: x.role, name: x.name, model: x.model, task: x.task, status: x.status, start: sec(x.start), end: sec(x.end), cost: x.cost, costFinal: x.costFinal, note: x.note || "" };
+    const a = byId.get(x.id);
+    if (!a) { agents.push({ id: x.id, ...next }); fresh.add(x.id); structure = true; continue; }
+    if (["parentId", "taskId", "name", "model", "task", "note"].some(k => a[k] !== next[k])) structure = true;
+    Object.assign(a, next);
+  }
+  structure ? render() : tick();
+}
+function updateLabel() {
+  if (!feed.connected) return setMode("off");
+  if (!feed.run) return setMode("wait");
+  setMode("live", feed.run + (feed.ended ? " · ended" : " · " + Math.max(0, Math.round((Date.now() - feed.lastTs) / 1000)) + "s ago"));
+}
+function connect() {
+  fetch("/capabilities").then(r => r.json()).then(c => { retryInfo = c.retry; failRefresh(); }).catch(() => {});
+  mode = "live"; showControls(); clearRun(); feed.run = null; render(); setMode("wait");
+  const es = new EventSource("/stream");   // the browser reconnects by itself; the server sends the latest snapshot at once
+  es.onopen = () => { feed.connected = true; };
+  es.onmessage = (e) => { feed.connected = true; applySnapshot(JSON.parse(e.data)); };
+  es.onerror = () => { feed.connected = false; };
+}
+async function startReplay(id) {
+  mode = "replay"; showControls(); clearRun(); feed.run = null; render(); setMode("replay", id);
+  try {
+    const res = await fetch("/runs/" + encodeURIComponent(id));
+    if (!res.ok) throw new Error(res.status);
+    rp.snaps = await res.json();
+  } catch (e) { rp.snaps = []; setMode("off", "run " + id + " not found"); return; }
+  rp.i = 0; rp.t = rp.snaps[0] ? rp.snaps[0].ts : 0;
+  if (params.has("instant") && rp.snaps.length) { rp.t = rp.snaps.at(-1).ts; stepReplay(0); }
+}
+function stepReplay(dt) {
+  if (!rp.snaps.length) return;
+  rp.t = Math.min(rp.t + dt * 1000, rp.snaps.at(-1).ts);
+  while (rp.i < rp.snaps.length && rp.snaps[rp.i].ts <= rp.t) applySnapshot(rp.snaps[rp.i++]);
+  now = feed.ended ? feed.endAt : (rp.t - feed.origin) / 1000;
+  tick();
+}
+
+let last = performance.now();
+setInterval(() => {
+  const t = performance.now();
+  const dt = (t - last) / 1000 * speed; last = t;
+  if (mode === "live") { now = feed.ended ? feed.endAt : (Date.now() - feed.origin) / 1000; tick(); updateLabel(); return; }
+  if (mode === "replay") { stepReplay(dt); return; }
+  const done = agents.length && agents.every(a => a.status === "done" || a.status === "failed");
+  if (done && !script.length) { tick(); return; }
+  now += dt;
+  let changed = false;
+  while (script.length && script[0][0] <= now) { script.shift()[1](); changed = true; }
+  changed ? render() : tick();
+}, 200);
+
+$("#replay").addEventListener("click", () => mode === "replay" ? startReplay(params.get("replay")) : reset());
+$("#resetView").addEventListener("click", () => { userMoved = false; fitView(); drawWires(); });
+$("#resetLayout").addEventListener("click", () => { cache.forEach(li => setOff(li, { x: 0, y: 0 })); drawWires(); });
+$("#speed").addEventListener("click", (e) => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; e.target.textContent = speed + "×"; });
+$("#foldAll").addEventListener("click", () => { const k = byParent(); agents.forEach(a => { if ((k.get(a.id) || []).length) folded.add(a.id); }); holdRoot(render); });
+$("#unfoldAll").addEventListener("click", () => { folded.clear(); holdRoot(render); });
+$("#theme").addEventListener("click", () => {
+  const el = document.documentElement;
+  const dark = el.dataset.theme ? el.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  el.dataset.theme = dark ? "light" : "dark";
+});
+if (params.has("replay")) startReplay(params.get("replay"));
+else if (params.has("demo") || location.protocol === "file:") { reset(); setMode("demo"); showControls(); }
+else connect();
+</script>
+</body>
+</html>
